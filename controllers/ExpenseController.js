@@ -85,3 +85,4 @@ export const deleteExpense = async (req, res) => {
       .json({ message: "Error deleting expense", details: err.message });
   }
 };
+//backend code for expense management
