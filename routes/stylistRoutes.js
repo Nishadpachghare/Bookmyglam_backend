@@ -1,12 +1,19 @@
 import express from "express";
 import multer from "multer";
+import { CloudinaryStorage } from "multer-storage-cloudinary";
+import cloudinary from "../config/cloudinary.js";
 import Stylist from "../models/Stylist.js";
 
 const router = express.Router();
 
-// ===== MULTER SETUP =====
-// Use memory storage (we can later replace this with Cloudinary upload)
-const storage = multer.memoryStorage();
+// ===== MULTER + Cloudinary SETUP =====
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "stylists",
+    allowed_formats: ["jpg", "png", "jpeg", "webp"],
+  },
+});
 const upload = multer({ storage });
 
 // ===== ADD NEW STYLIST =====
@@ -19,28 +26,30 @@ router.post("/", upload.single("photo"), async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // (Optional) store base64 preview for now
-    let photo = null;
-    if (req.file) {
-      photo = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
-    }
+    // normalize email
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Prepare photo URL (CloudinaryStorage exposes `path` or secure_url)
+    const photoUrl = req.file && (req.file.path || req.file.secure_url || req.file.url)
+      ? (req.file.path || req.file.secure_url || req.file.url)
+      : "";
 
     const newStylist = new Stylist({
-      name,
-      phone,
-      email,
+      name: name.trim(),
+      phone: phone.trim(),
+      email: normalizedEmail,
       role,
-      photo,
+      photoUrl,
       status: "active",
     });
 
     const savedStylist = await newStylist.save();
-    res.status(201).json({
-      message: "Stylist added successfully",
-      stylist: savedStylist,
-    });
+    res.status(201).json({ message: "Stylist added successfully", stylist: savedStylist });
   } catch (err) {
     console.error("Error creating stylist:", err);
+    if (err.code === 11000) {
+      return res.status(400).json({ message: "Email already exists" });
+    }
     res.status(500).json({ message: "Server error", error: err.message });
   }
 });
