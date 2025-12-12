@@ -12,27 +12,29 @@ import manageServiceRoutes from "./routes/ManageserviceRoutes.js";
 import stylistRoutes from "./routes/stylistRoutes.js";
 import expenseRoutes from "./routes/ExpenseRoutes.js";
 import uploadsRouter from "./routes/uploads.js";
-import inventoryRoutes from "./routes/inventoryRoutes.js"; // 👈 NEW
+import inventoryRoutes from "./routes/inventoryRoutes.js";
 
-// ===== Load env + connect DB =====
 dotenv.config();
-connectDB();
 
 const app = express();
+
+// ===== Request logger (helps debug 404s and route calls) =====
+app.use((req, res, next) => {
+  console.log(new Date().toISOString(), req.method, req.originalUrl);
+  next();
+});
 
 // ===== Middlewares =====
 app.use(
   cors({
-    origin: ["http://localhost:5173"], // your Vite frontend
+    // allow the frontends you use (add domains if you host elsewhere)
+    origin: ["http://localhost:5173", "http://localhost:3000"],
     credentials: true,
   })
 );
 
-// for JSON bodies
 app.use(express.json({ limit: "10mb" }));
-// for form-encoded (optional, but nice to have)
 app.use(express.urlencoded({ extended: true }));
-// cookies if you ever need auth cookies
 app.use(cookieParser());
 
 // ===== Health check =====
@@ -41,17 +43,16 @@ app.get("/", (req, res) => {
 });
 
 // ===== API ROUTES =====
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", authRoutes);           // auth routes (register/login + OTP)
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/Manageservices", manageServiceRoutes);
 app.use("/api/stylists", stylistRoutes);
 app.use("/api/expenses", expenseRoutes);
-
-app.use("/api/uploads", uploadsRouter);     // Cloudinary media + links
-app.use("/api/inventory", inventoryRoutes); // 👈 Inventory management
+app.use("/api/uploads", uploadsRouter);
+app.use("/api/inventory", inventoryRoutes);
 
 // ===== 404 handler =====
-app.use((req, res, next) => {
+app.use((req, res) => {
   res.status(404).json({
     ok: false,
     message: "Route not found",
@@ -59,7 +60,7 @@ app.use((req, res, next) => {
   });
 });
 
-// ===== Global error handler (optional but helpful) =====
+// ===== Global error handler =====
 app.use((err, req, res, next) => {
   console.error("Unhandled error:", err);
   res
@@ -67,8 +68,29 @@ app.use((err, req, res, next) => {
     .json({ ok: false, error: err.message || "Internal server error" });
 });
 
-// ===== START SERVER =====
+// ===== Start server after DB connection =====
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+
+async function start() {
+  try {
+    await connectDB();
+    app.listen(PORT, () => {
+      console.log(`🚀 Server running on http://localhost:${PORT}`);
+    });
+  } catch (err) {
+    console.error("Failed to start server:", err);
+    process.exit(1);
+  }
+}
+
+start();
+
+// graceful shutdown
+process.on("SIGINT", () => {
+  console.log("SIGINT received — closing server");
+  process.exit(0);
+});
+process.on("SIGTERM", () => {
+  console.log("SIGTERM received — closing server");
+  process.exit(0);
 });
