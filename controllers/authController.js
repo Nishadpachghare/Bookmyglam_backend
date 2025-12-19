@@ -6,16 +6,20 @@ import validator from "validator";
 import dotenv from "dotenv";
 dotenv.config();
 
-const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
 
-if (!JWT_SECRET) {
-  console.warn("⚠️  JWT_SECRET is not set in .env. Set it to a secure random string.");
+// Use the provided secret in production; fall back to a dev secret when
+// NODE_ENV !== 'production' so jwt.sign doesn't throw while developing.
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV !== "production" ? "dev_secret_change_me" : undefined);
+
+if (!process.env.JWT_SECRET) {
+  console.warn(
+    "⚠️  JWT_SECRET is not set in .env. Using a development fallback secret."
+  );
 }
 
 // Helper to create token
-const createToken = (payload) =>
-  jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
+const createToken = (payload) => jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 
 // Register a new user
 export const registerUser = async (req, res) => {

@@ -1,16 +1,15 @@
-// server.js
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import connectDB from "./config/db.js";
 
-// ===== Route imports =====
+// ROUTES
 import authRoutes from "./routes/authRoutes.js";
 import bookingRoutes from "./routes/bookingRoutes.js";
-import manageServiceRoutes from "./routes/ManageserviceRoutes.js";
+import manageServiceRoutes from "./routes/manageServiceRoutes.js";
 import stylistRoutes from "./routes/stylistRoutes.js";
-import expenseRoutes from "./routes/ExpenseRoutes.js";
+import expenseRoutes from "./routes/expenseRoutes.js";
 import uploadsRouter from "./routes/uploads.js";
 import inventoryRoutes from "./routes/inventoryRoutes.js";
 
@@ -18,32 +17,57 @@ dotenv.config();
 
 const app = express();
 
-// ===== Request logger (helps debug 404s and route calls) =====
+/* ===============================
+   🔎 REQUEST LOGGER (FIRST)
+================================ */
 app.use((req, res, next) => {
-  console.log(new Date().toISOString(), req.method, req.originalUrl);
+  console.log(`[${req.method}] ${req.originalUrl} - Origin: ${req.headers.origin || 'none'}`);
   next();
 });
 
-// ===== Middlewares =====
+/* ===============================
+   🌐 CORS FIX - ALL LOCALHOST PORTS
+================================ */
 app.use(
   cors({
-    // allow the frontends you use (add domains if you host elsewhere)
-    origin: ["http://localhost:5173", "http://localhost:3000"],
+    origin: function (origin, callback) {
+      // Allow requests with no origin (mobile apps, Postman, etc.)
+      if (!origin) return callback(null, true);
+      // Allow ALL localhost ports using regex
+      const localhostRegex = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/;
+      if (localhostRegex.test(origin)) {
+        return callback(null, true);
+      }
+      // Block everything else
+      return callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+    exposedHeaders: ['Set-Cookie'],
+    preflightContinue: false,
+    optionsSuccessStatus: 204
   })
 );
 
+/* ===============================
+   📦 MIDDLEWARES
+================================ */
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// ===== Health check =====
+/* ===============================
+   🩺 HEALTH CHECK
+================================ */
 app.get("/", (req, res) => {
-  res.json({ ok: true, message: "✅ Salon backend running successfully" });
+  res.json({ ok: true, message: "✅ Salon backend running - CORS FIXED" });
 });
 
-// ===== API ROUTES =====
-app.use("/api/auth", authRoutes);           // auth routes (register/login + OTP)
+/* ===============================
+   🚀 API ROUTES
+================================ */
+app.use("/api/auth", authRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/Manageservices", manageServiceRoutes);
 app.use("/api/stylists", stylistRoutes);
@@ -51,7 +75,9 @@ app.use("/api/expenses", expenseRoutes);
 app.use("/api/uploads", uploadsRouter);
 app.use("/api/inventory", inventoryRoutes);
 
-// ===== 404 handler =====
+/* ===============================
+   ❌ 404 HANDLER
+================================ */
 app.use((req, res) => {
   res.status(404).json({
     ok: false,
@@ -60,37 +86,34 @@ app.use((req, res) => {
   });
 });
 
-// ===== Global error handler =====
+/* ===============================
+   ⚠️ GLOBAL ERROR HANDLER
+================================ */
 app.use((err, req, res, next) => {
-  console.error("Unhandled error:", err);
-  res
-    .status(err.status || 500)
-    .json({ ok: false, error: err.message || "Internal server error" });
+  console.error("🔥 Error:", err.message);
+  res.status(500).json({
+    ok: false,
+    error: err.message || "Internal Server Error",
+  });
 });
 
-// ===== Start server after DB connection =====
+/* ===============================
+   ▶️ START SERVER
+================================ */
 const PORT = process.env.PORT || 5000;
 
 async function start() {
   try {
     await connectDB();
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on http://localhost:${PORT}`);
-    });
+    console.log("✅ MongoDB connected");
   } catch (err) {
-    console.error("Failed to start server:", err);
-    process.exit(1);
+    console.error("⚠️ MongoDB failed:", err.message);
   }
+
+  app.listen(PORT, () => {
+    console.log(`\n🚀 Server: http://localhost:${PORT}`);
+    console.log(`🔥 CORS: ALL localhost ports ALLOWED\n`);
+  });
 }
 
 start();
-
-// graceful shutdown
-process.on("SIGINT", () => {
-  console.log("SIGINT received — closing server");
-  process.exit(0);
-});
-process.on("SIGTERM", () => {
-  console.log("SIGTERM received — closing server");
-  process.exit(0);
-});

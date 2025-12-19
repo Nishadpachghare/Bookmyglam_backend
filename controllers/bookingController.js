@@ -110,9 +110,10 @@ export const createBooking = async (req, res) => {
 export const getAllBookings = async (req, res) => {
   try {
     const bookings = await Booking.find().sort({ createdAt: -1 });
-    return res.status(200).json({ ok: true, bookings });
+    // Return the raw bookings array for simpler frontend consumption
+    return res.status(200).json(bookings);
   } catch (error) {
-    console.error("❌ Error fetching bookings:", error);
+    console.error("❌ Error fetching bookings:", error.stack || error);
     return res.status(500).json({
       ok: false,
       message: "Failed to fetch bookings",
