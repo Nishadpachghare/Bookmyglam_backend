@@ -7,9 +7,9 @@ import connectDB from "./config/db.js";
 // ROUTES
 import authRoutes from "./routes/authRoutes.js";
 import bookingRoutes from "./routes/bookingRoutes.js";
-import manageServiceRoutes from "./routes/manageServiceRoutes.js";
+import manageServiceRoutes from "./routes/ManageserviceRoutes.js";
 import stylistRoutes from "./routes/stylistRoutes.js";
-import expenseRoutes from "./routes/expenseRoutes.js";
+import expenseRoutes from "./routes/ExpenseRoutes.js";
 import uploadsRouter from "./routes/uploads.js";
 import inventoryRoutes from "./routes/inventoryRoutes.js";
 
