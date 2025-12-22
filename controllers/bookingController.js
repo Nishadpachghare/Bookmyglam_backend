@@ -21,6 +21,7 @@ export const createBooking = async (req, res) => {
       email,
       date,
       time,
+      mode,
       paymentStatus,
     } = req.body;
 
@@ -61,6 +62,7 @@ export const createBooking = async (req, res) => {
       email,
       date,
       time,
+      mode: mode || "offline",
       paymentStatus: paymentStatus || "Pending",
       services: servicesArray,
     };
