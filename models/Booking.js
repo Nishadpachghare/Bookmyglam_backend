@@ -13,6 +13,7 @@ const BookingSchema = new mongoose.Schema(
     email: { type: String },
     date: { type: String, required: true },
     time: { type: String, required: true },
+    mode: { type: String, enum: ["online", "offline"], default: "offline" },
     services: [ServiceSchema],
     paymentStatus: {
       type: String,
