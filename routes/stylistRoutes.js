@@ -44,7 +44,28 @@ router.post("/", upload.single("photo"), async (req, res) => {
     });
 
     const savedStylist = await newStylist.save();
-    res.status(201).json({ message: "Stylist added successfully", stylist: savedStylist });
+
+    // Send welcome email (best-effort) and record status
+    let welcomeEmailStatus = "none";
+    try {
+      const { sendEmail } = await import("../Utils/emailSender.js");
+      const { stylistWelcomeHtml } = await import("../Utils/emailTemplates.js");
+      const html = stylistWelcomeHtml({ name: savedStylist.name, role: savedStylist.role });
+      const emailResult = await sendEmail({ to: savedStylist.email, subject: "Welcome to Our Salon - Next Steps", html });
+      if (emailResult && emailResult.ok) {
+        welcomeEmailStatus = emailResult.fallback ? "fallback" : "sent";
+        console.log(`[Welcome Email] to ${savedStylist.email} status: ${welcomeEmailStatus}`);
+      } else {
+        welcomeEmailStatus = "failed";
+        console.warn(`[Welcome Email] unexpected result for ${savedStylist.email}:`, emailResult);
+      }
+    } catch (emailErr) {
+      welcomeEmailStatus = "error";
+      console.warn("Welcome email failed:", emailErr?.message || emailErr);
+      // don't block stylist creation on email failure
+    }
+
+    res.status(201).json({ message: "Stylist added successfully", stylist: savedStylist, welcomeEmailStatus });
   } catch (err) {
     console.error("Error creating stylist:", err);
     if (err.code === 11000) {
