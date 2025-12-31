@@ -13,7 +13,7 @@ function uploadBufferToCloudinary(buffer, folder = "uploads") {
       folder,
       resource_type: "auto",
       // Cloudinary will auto format & quality (compress)
-      eager: [{ fetch_format: "auto", quality: "auto" }],
+      eager: [{ fetch_format: "auto", quality: "auto" }], 
       overwrite: true,
     };
 
@@ -137,7 +137,10 @@ export const uploadLink = async (req, res) => {
  */
 export const listMedia = async (req, res) => {
   try {
-    const items = await Media.find().sort({ createdAt: -1 }).limit(200);
+    // Agar query mein 'public=true' hai toh sirf published items bhejein
+    const filter = req.query.public === 'true' ? { publishedToWeb: true } : {};
+    
+    const items = await Media.find(filter).sort({ createdAt: -1 });
     res.json({ ok: true, items });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -166,6 +169,7 @@ export const createDraft = async (req, res) => {
       platform,
       url: url || '',
       uploaded: false,
+      publishedToWeb: false, // drafts are explicitly not published
     });
     return res.json({ ok: true, media: mediaDoc });
   } catch (err) {
