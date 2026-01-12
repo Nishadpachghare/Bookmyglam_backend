@@ -103,11 +103,10 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 
 async function start() {
-  try {
-    await connectDB();
-    console.log("✅ MongoDB connected");
-  } catch (err) {
-    console.error("⚠️ MongoDB failed:", err.message);
+  const conn = await connectDB();
+  if (!conn) {
+    console.error("❌ MongoDB connection failed. Server will not start. Check your MONGO_URI and MongoDB Atlas network access (IP whitelist / VPC).\nSee: https://www.mongodb.com/docs/atlas/security-whitelist/");
+    process.exit(1);
   }
 
   app.listen(PORT, () => {
