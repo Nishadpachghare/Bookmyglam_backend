@@ -23,6 +23,7 @@ export const createBooking = async (req, res) => {
       time,
       mode,
       paymentStatus,
+      stylist, // stylist id from frontend (optional)
     } = req.body;
 
     // Normalize services array (accepts different shapes from frontend)
@@ -65,6 +66,7 @@ export const createBooking = async (req, res) => {
       mode: mode || "offline",
       paymentStatus: paymentStatus || "Pending",
       services: servicesArray,
+      ...(stylist ? { stylistId: stylist } : {}),
     };
 
     // Create booking
