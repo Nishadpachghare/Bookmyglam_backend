@@ -7,14 +7,26 @@ import Media from "../models/Media.js";
  * helper to upload buffer to cloudinary with compression/transformations
  * resource_type: "auto" lets Cloudinary handle images/videos.
  */
-function uploadBufferToCloudinary(buffer, folder = "uploads") {
+/**
+ * Upload a buffer to Cloudinary.  For large media (especially videos) Cloudinary
+ * recommends chunked uploads because the HTTP request to their server can exceed
+ * size limits (resulting in a 413).  We also dynamically pick the resource_type
+ * in case we know it's a video, although "auto" usually works.
+ *
+ * @param {Buffer} buffer  file data
+ * @param {string} folder  destination folder in Cloudinary
+ * @param {string} resType optional resource type (auto|image|video)
+ */
+function uploadBufferToCloudinary(buffer, folder = "uploads", resType = "auto") {
   return new Promise((resolve, reject) => {
     const opts = {
       folder,
-      resource_type: "auto",
+      resource_type: resType,
       // Cloudinary will auto format & quality (compress)
-      eager: [{ fetch_format: "auto", quality: "auto" }], 
+      eager: [{ fetch_format: "auto", quality: "auto" }],
       overwrite: true,
+      // chunk_size in bytes: 6MB is a sensible default; adjust if needed
+      chunk_size: 6000000,
     };
 
     const uploadStream = cloudinary.uploader.upload_stream(opts, (error, result) => {
@@ -38,7 +50,29 @@ export const uploadMedia = async (req, res) => {
       return res.status(400).json({ ok: false, error: "No file uploaded" });
     }
 
-    const result = await uploadBufferToCloudinary(req.file.buffer, process.env.CLOUDINARY_UPLOAD_FOLDER || "my-app");
+    // determine resource type for Cloudinary; prefer explicit video when
+    // the incoming mimetype indicates one.  The `type` body field may also be
+    // "video" but some clients skip it, so use the safest source.
+    const mimetype = req.file.mimetype || "";
+    const resType = mimetype.startsWith("video") ? "video" : "auto";
+
+    // upload, catching 413s so we can return an appropriate status
+    let result;
+    try {
+      result = await uploadBufferToCloudinary(
+        req.file.buffer,
+        process.env.CLOUDINARY_UPLOAD_FOLDER || "my-app",
+        resType,
+      );
+    } catch (cloudErr) {
+      console.error("uploadMedia error:", cloudErr);
+      if (cloudErr.http_code === 413) {
+        return res
+          .status(413)
+          .json({ ok: false, error: "File too large for Cloudinary upload" });
+      }
+      return res.status(500).json({ ok: false, error: cloudErr.message || "Upload failed" });
+    }
 
     // If draftId provided, update existing media doc instead of creating new
     if (draftId) {

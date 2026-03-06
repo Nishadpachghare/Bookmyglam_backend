@@ -24,6 +24,14 @@ const BookingSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Stylist",
     },
+paymentOrderId: {
+  type: String,
+},
+
+paymentSessionId: {
+  type: String,
+}
+
   },
   { timestamps: true }
 );

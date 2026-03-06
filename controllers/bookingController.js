@@ -1,194 +1,330 @@
-// controllers/bookingController.js
 import Booking from "../models/Booking.js";
 import Otp from "../models/Otp.js";
+import axios from "axios";
 import { sendEmail } from "../Utils/emailSender.js";
 import { bookingConfirmationHtml } from "../Utils/emailTemplates.js";
 
-/**
- * CREATE BOOKING
- * - Normalizes services array (supports both selectedServices and services)
- * - Requires email to have a verified OTP in Otp collection
- * - Creates booking
- * - Sends confirmation email (best-effort; booking still succeeds if email send fails)
- */
+
+/* ======================================================
+   CREATE BOOKING
+====================================================== */
+
 export const createBooking = async (req, res) => {
   try {
+
     const {
       selectedServices,
-      services,
       customerName,
       phone,
       email,
       date,
       time,
       mode,
-      paymentStatus,
-      stylist, // stylist id from frontend (optional)
+      stylist
     } = req.body;
 
-    // Normalize services array (accepts different shapes from frontend)
-    const servicesArray =
-      services && Array.isArray(services) && services.length
-        ? services.map((s) => ({
-            serviceName: s.serviceName ?? s.service ?? "",
-            price: Number(s.price) || 0,
-            duration: s.duration ?? s.time ?? "",
-          }))
-        : (selectedServices || []).map((s) => ({
-            // selectedServices items might be objects with different props
-            serviceName: s.serviceName ?? s.service ?? "",
-            price: Number(s.price ?? s.amount ?? 0) || 0,
-            duration: s.duration ?? s.time ?? "",
-          }));
-
-    if (!servicesArray.length) {
-      return res.status(400).json({ ok: false, message: "Please select at least one service" });
+    // simple validation to prevent Mongoose from throwing
+    if (!selectedServices || selectedServices.length === 0) {
+      return res.status(400).json({ ok: false, message: "Select at least one service" });
+    }
+    if (!customerName || !phone || !date || !time) {
+      return res.status(400).json({ ok: false, message: "Missing required booking fields" });
     }
 
-    // Email must be present
-    if (!email) {
-      return res.status(400).json({ ok: false, message: "Email is required" });
-    }
+    // OTP CHECK
+    const otpDoc = await Otp.findOne({ to: email, verified: true });
 
-    // Ensure email has a verified OTP
-    const otpDoc = await Otp.findOne({ to: email, verified: true }).sort({ createdAt: -1 });
     if (!otpDoc) {
-      return res.status(400).json({ ok: false, message: "Email not verified with OTP" });
+      return res.status(400).json({
+        ok:false,
+        message:"Email not verified"
+      });
     }
 
-    // Build booking data
-    const bookingData = {
+    const services = selectedServices.map(s => ({
+      // support both field names just in case client is out-of-sync
+      serviceName: s.serviceName ?? s.service ?? "",
+      price: Number(s.price),
+      duration: s.duration || ""
+    }));
+
+    const booking = await Booking.create({
+
       customerName,
       phone,
       email,
       date,
       time,
+
+      services,
+
+      stylistId: stylist || null,
+
       mode: mode || "offline",
-      paymentStatus: paymentStatus || "Pending",
-      services: servicesArray,
-      ...(stylist ? { stylistId: stylist } : {}),
-    };
+      paymentStatus:"Pending"
 
-    // Create booking
-    const booking = await Booking.create(bookingData);
+    });
 
-    // Attempt to send confirmation email (best-effort)
-    try {
+    // SEND CONFIRMATION EMAIL
+    try{
+
       const html = bookingConfirmationHtml({
         customerName: booking.customerName,
         services: booking.services,
         date: booking.date,
         time: booking.time,
-        bookingId: booking._id?.toString?.() ?? "",
+        bookingId: booking._id
       });
 
       await sendEmail({
         to: booking.email,
-        subject: "Booking Confirmation — Your Salon",
-        html,
+        subject:"Salon Booking Confirmation",
+        html
       });
-    } catch (err) {
-      console.error("Failed to send booking confirmation email:", err);
-      // Return 201 but let frontend know email failed (so they can retry later if desired)
-      return res.status(201).json({
-        ok: true,
-        message: "Booking created, but confirmation email failed to send",
-        booking,
+
+    }catch(err){
+      console.log("Email failed:",err);
+    }
+
+    res.status(201).json({
+      ok:true,
+      booking
+    });
+
+  }
+  catch(error){
+
+    console.log("Create booking error:",error);
+
+    res.status(500).json({
+      ok:false,
+      message:"Booking creation failed"
+    });
+
+  }
+};
+
+
+
+/* ======================================================
+   GET ALL BOOKINGS
+====================================================== */
+
+export const getAllBookings = async (req,res)=>{
+  try{
+
+    const bookings = await Booking.find()
+      .sort({createdAt:-1});
+
+    res.json(bookings);
+
+  }
+  catch(error){
+
+    res.status(500).json({
+      message:"Failed to fetch bookings"
+    });
+
+  }
+};
+
+
+
+/* ======================================================
+   DELETE BOOKING
+====================================================== */
+
+export const deleteBooking = async (req,res)=>{
+
+  try{
+
+    const {id} = req.params;
+
+    await Booking.findByIdAndDelete(id);
+
+    res.json({
+      ok:true,
+      message:"Booking deleted"
+    });
+
+  }
+  catch(error){
+
+    res.status(500).json({
+      message:"Delete failed"
+    });
+
+  }
+
+};
+
+
+
+/* ======================================================
+   UPDATE BOOKING
+====================================================== */
+
+export const updateBooking = async (req,res)=>{
+
+  try{
+
+    const {id} = req.params;
+
+    const updated = await Booking.findByIdAndUpdate(
+      id,
+      req.body,
+      {new:true}
+    );
+
+    res.json({
+      ok:true,
+      booking:updated
+    });
+
+  }
+  catch(error){
+
+    res.status(500).json({
+      message:"Update failed"
+    });
+
+  }
+
+};
+
+
+
+/* ======================================================
+   CREATE CASHFREE PAYMENT
+====================================================== */
+
+export const createPaymentOrder = async (req,res)=>{
+
+  try{
+
+    const {bookingId,amount} = req.body;
+
+    const booking = await Booking.findById(bookingId);
+
+    if(!booking){
+      return res.status(404).json({
+        message:"Booking not found"
       });
     }
 
-    return res.status(201).json({ ok: true, message: "Booking added successfully", booking });
-  } catch (error) {
-    console.error("❌ Error creating booking:", error);
-    return res.status(500).json({
-      ok: false,
-      message: "Server error while creating booking",
-      details: error.message,
+    const orderId = "order_" + Date.now();
+
+    const response = await axios.post(
+
+      "https://sandbox.cashfree.com/pg/orders",
+
+      {
+        order_id:orderId,
+        order_amount:amount,
+        order_currency:"INR",
+
+        customer_details:{
+          customer_id:booking._id.toString(),
+          customer_email:booking.email,
+          customer_phone:booking.phone
+        },
+
+        order_meta:{
+          return_url:`http://localhost:3000/payment-success?order_id=${orderId}`
+        }
+
+      },
+
+      {
+        headers:{
+          "Content-Type":"application/json",
+          "x-api-version":"2022-09-01",
+          "x-client-id":process.env.CASHFREE_APP_ID,
+          "x-client-secret":process.env.CASHFREE_SECRET_KEY
+        }
+      }
+
+    );
+
+    booking.paymentOrderId = orderId;
+    booking.mode = "online";
+
+    await booking.save();
+
+    res.json({
+      payment_link:response.data.payment_link
     });
+
   }
+  catch(error){
+
+    console.log("Cashfree error:",error.response?.data || error.message);
+
+    res.status(500).json({
+      message:"Payment creation failed"
+    });
+
+  }
+
 };
 
-// ===========================================
-// GET ALL BOOKINGS
-// ===========================================
-export const getAllBookings = async (req, res) => {
-  try {
-    const bookings = await Booking.find().sort({ createdAt: -1 });
-    // Return the raw bookings array for simpler frontend consumption
-    return res.status(200).json(bookings);
-  } catch (error) {
-    console.error("❌ Error fetching bookings:", error.stack || error);
-    return res.status(500).json({
-      ok: false,
-      message: "Failed to fetch bookings",
-      details: error.message,
+
+
+/* ======================================================
+   VERIFY PAYMENT
+====================================================== */
+
+export const verifyPayment = async (req,res)=>{
+
+  try{
+
+    const {orderId} = req.body;
+
+    const booking = await Booking.findOne({
+      paymentOrderId:orderId
     });
-  }
-};
 
-// ===========================================
-// DELETE BOOKING
-// ===========================================
-export const deleteBooking = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const deletedBooking = await Booking.findByIdAndDelete(id);
-
-    if (!deletedBooking) {
-      return res.status(404).json({ ok: false, message: "Booking not found" });
+    if(!booking){
+      return res.status(404).json({
+        ok:false
+      });
     }
 
-    return res.status(200).json({ ok: true, message: "Booking deleted successfully", deletedBooking });
-  } catch (error) {
-    console.error("❌ Error deleting booking:", error);
-    return res.status(500).json({
-      ok: false,
-      message: "Server error while deleting booking",
-      details: error.message,
-    });
-  }
-};
+    const response = await axios.get(
 
-// ===========================================
-// UPDATE BOOKING
-// ===========================================
-export const updateBooking = async (req, res) => {
-  try {
-    const { id } = req.params;
-    console.log("🔥 PUT /api/bookings/:id called with id =", id);
-    console.log("Body from frontend:", req.body);
+      `https://sandbox.cashfree.com/pg/orders/${orderId}`,
 
-    // Normalize services (price to Number) if provided
-    let updateData = { ...req.body };
+      {
+        headers:{
+          "x-api-version":"2022-09-01",
+          "x-client-id":process.env.CASHFREE_APP_ID,
+          "x-client-secret":process.env.CASHFREE_SECRET_KEY
+        }
+      }
 
-    if (Array.isArray(updateData.services)) {
-      updateData.services = updateData.services.map((s) => ({
-        serviceName: s.serviceName ?? s.service ?? "",
-        price: Number(s.price ?? 0) || 0,
-        duration: s.duration ?? s.time ?? "",
-      }));
+    );
+
+    if(response.data.order_status === "PAID"){
+
+      booking.paymentStatus = "Paid";
+
+      await booking.save();
+
     }
 
-    const updatedBooking = await Booking.findByIdAndUpdate(id, updateData, {
-      new: true,
-      runValidators: true,
+    res.json({
+      ok:true
     });
 
-    if (!updatedBooking) {
-      console.log("⚠️ Booking not found in DB for id =", id);
-      return res.status(404).json({ ok: false, message: "Booking not found" });
-    }
-
-    console.log("✅ Booking updated:", updatedBooking._id);
-
-    return res.status(200).json({ ok: true, message: "Booking updated successfully", booking: updatedBooking });
-  } catch (error) {
-    console.error("❌ Error updating booking:", error);
-    return res.status(500).json({
-      ok: false,
-      message: "Server error while updating booking",
-      details: error.message,
-    });
   }
+  catch(error){
+
+    console.log("Verify payment error:",error);
+
+    res.status(500).json({
+      ok:false
+    });
+
+  }
+
 };

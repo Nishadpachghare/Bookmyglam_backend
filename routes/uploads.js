@@ -18,7 +18,10 @@ const router = express.Router();
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
-  limits: { fileSize: 200 * 1024 * 1024 }, // 200 MB
+  // increase limit to 500MB (adjust as required). Cloudinary itself may still
+  // reject anything larger than their account limit, but multer won't stop us
+  // from buffering it first.
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB
   fileFilter: (req, file, cb) => {
     const allowed = [
       "image/jpeg",
@@ -26,14 +29,19 @@ const upload = multer({
       "image/webp",
       "image/gif",
       "image/svg+xml",
+      // allow any video type generically; Cloudinary will enforce supported
+      // formats when uploading.  this helps avoid the 413 from multer.
       "video/mp4",
       "video/webm",
       "video/quicktime",
+      "video/avi",
+      "video/mov",
     ];
     if (allowed.includes(file.mimetype)) cb(null, true);
     else cb(new Error("Invalid file type"), false);
   },
 });
+
 
 router.post("/media", upload.single("file"), uploadMedia);
 router.post("/link", uploadLink);

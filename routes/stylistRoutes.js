@@ -76,9 +76,17 @@ router.post("/", upload.single("photo"), async (req, res) => {
 });
 
 // ===== GET ALL STYLISTS =====
+// optional query params:
+//    ?status=active   -> return only stylists with matching status
+//    ?role=senior      -> filter by role etc (can be extended later)
 router.get("/", async (req, res) => {
   try {
-    const stylists = await Stylist.find();
+    // build a simple filter object from recognized query params
+    const filter = {};
+    if (req.query.status) filter.status = req.query.status;
+    if (req.query.role) filter.role = req.query.role;
+
+    const stylists = await Stylist.find(filter);
     res.json(stylists);
   } catch (err) {
     res.status(500).json({ message: "Failed to fetch stylists", error: err.message });
