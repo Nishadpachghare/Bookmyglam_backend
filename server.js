@@ -16,10 +16,6 @@ import inventoryRoutes from "./routes/inventoryRoutes.js";
 dotenv.config();
 
 const app = express();
-
-/* ===============================
-   🔎 REQUEST LOGGER (FIRST)
-================================ */
 app.use((req, res, next) => {
   console.log(`[${req.method}] ${req.originalUrl} - Origin: ${req.headers.origin || 'none'}`);
   next();
@@ -49,24 +45,14 @@ app.use(
     optionsSuccessStatus: 204
   })
 );
-
-/* ===============================
-   📦 MIDDLEWARES
-================================ */
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-/* ===============================
-   🩺 HEALTH CHECK
-================================ */
 app.get("/", (req, res) => {
   res.json({ ok: true, message: "✅ Salon backend running - CORS FIXED" });
 });
 
-/* ===============================
-   🚀 API ROUTES
-================================ */
 app.use("/api/auth", authRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/Manageservices", manageServiceRoutes);
@@ -75,9 +61,7 @@ app.use("/api/expenses", expenseRoutes);
 app.use("/api/uploads", uploadsRouter);
 app.use("/api/inventory", inventoryRoutes);
 
-/* ===============================
-   ❌ 404 HANDLER
-================================ */
+
 app.use((req, res) => {
   res.status(404).json({
     ok: false,
@@ -86,9 +70,6 @@ app.use((req, res) => {
   });
 });
 
-/* ===============================
-   ⚠️ GLOBAL ERROR HANDLER
-================================ */
 app.use((err, req, res, next) => {
   console.error("🔥 Error:", err.message);
   res.status(500).json({
