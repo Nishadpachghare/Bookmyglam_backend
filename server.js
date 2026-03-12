@@ -16,51 +16,92 @@ import inventoryRoutes from "./routes/inventoryRoutes.js";
 dotenv.config();
 
 const app = express();
+
+/* ===============================
+   🪵 REQUEST LOGGER
+================================ */
 app.use((req, res, next) => {
   console.log(`[${req.method}] ${req.originalUrl} - Origin: ${req.headers.origin || 'none'}`);
   next();
 });
 
 /* ===============================
-   🌐 CORS FIX - ALL LOCALHOST PORTS
+   🌐 CORS FIX (LOCAL + PRODUCTION)
 ================================ */
+
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "https://book-my-glam-web.vercel.app"
+];
+
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Allow requests with no origin (mobile apps, Postman, etc.)
+
+      // allow requests with no origin (Postman / mobile apps)
       if (!origin) return callback(null, true);
-      // Allow ALL localhost ports using regex
+
+      // allow all localhost ports
       const localhostRegex = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/;
       if (localhostRegex.test(origin)) {
         return callback(null, true);
       }
-      // Block everything else
-      return callback(new Error('Not allowed by CORS'));
+
+      // allow production frontend
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
     },
+
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-    exposedHeaders: ['Set-Cookie'],
-    preflightContinue: false,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+      "Origin"
+    ],
+    exposedHeaders: ["Set-Cookie"],
     optionsSuccessStatus: 204
   })
 );
+
+/* ===============================
+   MIDDLEWARE
+================================ */
+
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+/* ===============================
+   TEST ROUTE
+================================ */
 
 app.get("/", (req, res) => {
   res.json({ ok: true, message: "✅ Salon backend running - CORS FIXED" });
 });
 
+/* ===============================
+   API ROUTES
+================================ */
+
 app.use("/api/auth", authRoutes);
 app.use("/api/bookings", bookingRoutes);
-app.use("/api/Manageservices", manageServiceRoutes);
+// mounted route for managing services (lowercase path is more conventional)
+app.use("/api/manageservices", manageServiceRoutes);
 app.use("/api/stylists", stylistRoutes);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/uploads", uploadsRouter);
 app.use("/api/inventory", inventoryRoutes);
 
+/* ===============================
+   404 HANDLER
+================================ */
 
 app.use((req, res) => {
   res.status(404).json({
@@ -69,6 +110,10 @@ app.use((req, res) => {
     path: req.originalUrl,
   });
 });
+
+/* ===============================
+   ERROR HANDLER
+================================ */
 
 app.use((err, req, res, next) => {
   console.error("🔥 Error:", err.message);
@@ -81,25 +126,33 @@ app.use((err, req, res, next) => {
 /* ===============================
    ▶️ START SERVER
 ================================ */
+
 const PORT = process.env.PORT || 5000;
+
+// export for integration tests or serverless adapters
+export default app;
 
 async function start() {
   const conn = await connectDB();
+
   if (!conn) {
-    console.error("❌ MongoDB connection failed. Server will not start. Check your MONGO_URI and MongoDB Atlas network access (IP whitelist / VPC).\nSee: https://www.mongodb.com/docs/atlas/security-whitelist/");
+    console.error(
+      "❌ MongoDB connection failed. Check MONGO_URI and Atlas whitelist."
+    );
     process.exit(1);
   }
 
   app.listen(PORT, async () => {
-    console.log(`\n🚀 Server: http://localhost:${PORT}`);
-    console.log(`🔥 CORS: ALL localhost ports ALLOWED\n`);
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`🌐 CORS: Localhost + Production allowed`);
 
-    // schedule email reminders once app is running
     try {
-      const { startReminderScheduler } = await import("./scheduler/reminderScheduler.js");
+      const { startReminderScheduler } = await import(
+        "./scheduler/reminderScheduler.js"
+      );
       startReminderScheduler();
     } catch (err) {
-      console.warn("Could not start reminder scheduler:", err.message || err);
+      console.warn("Scheduler not started:", err.message);
     }
   });
 }
