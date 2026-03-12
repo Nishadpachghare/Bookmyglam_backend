@@ -90,9 +90,17 @@ async function start() {
     process.exit(1);
   }
 
-  app.listen(PORT, () => {
+  app.listen(PORT, async () => {
     console.log(`\n🚀 Server: http://localhost:${PORT}`);
     console.log(`🔥 CORS: ALL localhost ports ALLOWED\n`);
+
+    // schedule email reminders once app is running
+    try {
+      const { startReminderScheduler } = await import("./scheduler/reminderScheduler.js");
+      startReminderScheduler();
+    } catch (err) {
+      console.warn("Could not start reminder scheduler:", err.message || err);
+    }
   });
 }
 

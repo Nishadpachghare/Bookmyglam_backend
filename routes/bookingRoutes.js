@@ -5,7 +5,9 @@ import {
   deleteBooking,
   updateBooking,
   createPaymentOrder,
-  verifyPayment 
+  verifyPayment,
+  confirmBooking,
+  cancelBooking
 } from "../controllers/bookingController.js";
 
 const router = express.Router();
@@ -23,5 +25,9 @@ router.post("/verify-payment", verifyPayment);
 router.get("/", getAllBookings);      
 router.put("/:id", updateBooking);    
 router.delete("/:id", deleteBooking); 
+
+// customer actions from reminder email
+router.get("/:id/confirm", confirmBooking);
+router.get("/:id/cancel", cancelBooking);
 
 export default router;

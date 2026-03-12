@@ -2,7 +2,7 @@ import Booking from "../models/Booking.js";
 import Otp from "../models/Otp.js";
 import axios from "axios";
 import { sendEmail } from "../Utils/emailSender.js";
-import { bookingConfirmationHtml } from "../Utils/emailTemplates.js";
+import { bookingConfirmationHtml, cancellationNotificationHtml } from "../Utils/emailTemplates.js";
 
 
 /* ======================================================
@@ -61,8 +61,9 @@ export const createBooking = async (req, res) => {
       stylistId: stylist || null,
 
       mode: mode || "offline",
-      paymentStatus:"Pending"
-
+      paymentStatus:"Pending",
+      // status defaults to Scheduled via schema
+      // reminderSent flag also handled by schema
     });
 
     // SEND CONFIRMATION EMAIL
@@ -327,4 +328,79 @@ export const verifyPayment = async (req,res)=>{
 
   }
 
+};
+
+// when the customer clicks a link to confirm their appointment
+export const confirmBooking = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const booking = await Booking.findById(id);
+    if (!booking) {
+      return res.status(404).send("Booking not found");
+    }
+    if (booking.status === "Canceled") {
+      return res.send("This booking was already canceled.");
+    }
+    booking.status = "Confirmed";
+    await booking.save();
+    const frontend = process.env.FRONTEND_URL;
+    if (frontend) {
+      return res.redirect(`${frontend}/?booking=${booking._id}&status=confirmed`);
+    }
+    res.send(
+      `<html><body><h2>Thank you, your booking has been confirmed.</h2></body></html>`
+    );
+  } catch (err) {
+    console.error("Confirm booking error:", err);
+    res.status(500).send("Internal server error");
+  }
+};
+
+// handle cancellation link
+export const cancelBooking = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const booking = await Booking.findById(id);
+    if (!booking) {
+      return res.status(404).send("Booking not found");
+    }
+    if (booking.status === "Canceled") {
+      return res.send("This booking is already canceled.");
+    }
+    booking.status = "Canceled";
+    await booking.save();
+
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (adminEmail) {
+      try {
+        const html = cancellationNotificationHtml({
+          customerName: booking.customerName,
+          email: booking.email,
+          phone: booking.phone,
+          services: booking.services,
+          date: booking.date,
+          time: booking.time,
+          bookingId: booking._id,
+        });
+        await sendEmail({
+          to: adminEmail,
+          subject: "Booking Cancelled by Customer",
+          html,
+        });
+      } catch (err) {
+        console.log("Failed to send admin cancel email:", err);
+      }
+    }
+
+    const frontend = process.env.FRONTEND_URL;
+    if (frontend) {
+      return res.redirect(`${frontend}/?booking=${booking._id}&status=canceled`);
+    }
+    res.send(
+      `<html><body><h2>Your booking has been canceled. We have informed the salon.</h2></body></html>`
+    );
+  } catch (err) {
+    console.error("Cancel booking error:", err);
+    res.status(500).send("Internal server error");
+  }
 };

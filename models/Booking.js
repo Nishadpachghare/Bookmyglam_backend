@@ -24,13 +24,25 @@ const BookingSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Stylist",
     },
-paymentOrderId: {
-  type: String,
-},
+    paymentOrderId: {
+      type: String,
+    },
 
-paymentSessionId: {
-  type: String,
-}
+    paymentSessionId: {
+      type: String,
+    },
+
+    // new fields for reminders and status
+    status: {
+      type: String,
+      enum: ["Scheduled", "Confirmed", "Canceled", "Completed"],
+      default: "Scheduled",
+    },
+
+    reminderSent: {
+      type: Boolean,
+      default: false,
+    }
 
   },
   { timestamps: true }
