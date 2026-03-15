@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import connectDB from "./config/db.js";
+import mongoose from "mongoose";
 
 // ROUTES
 import authRoutes from "./routes/authRoutes.js";
@@ -79,6 +80,15 @@ app.use(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+// Healthcheck middleware: if DB isn't connected yet, return 503 quickly.
+// This prevents serverless invocations from hanging while waiting for a DB connection.
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api") && mongoose.connection.readyState !== 1) {
+    return res.status(503).json({ ok: false, message: "Database not connected" });
+  }
+  next();
+});
 
 /* ===============================
    TEST ROUTE
@@ -162,6 +172,14 @@ async function start() {
     }
   });
 }
+
+process.on("unhandledRejection", (reason) => {
+  console.error("🔥 Unhandled Rejection:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("🔥 Uncaught Exception:", err);
+});
 
 const isServerless =
   Boolean(process.env.VERCEL) ||
