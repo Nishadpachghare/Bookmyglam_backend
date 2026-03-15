@@ -12,6 +12,8 @@ import stylistRoutes from "./routes/stylistRoutes.js";
 import expenseRoutes from "./routes/ExpenseRoutes.js";
 import uploadsRouter from "./routes/uploads.js";
 import inventoryRoutes from "./routes/inventoryRoutes.js";
+import couponRoutes from "./routes/couponRoutes.js";
+import offerRoutes from "./routes/offerRoutes.js";
 
 dotenv.config();
 
@@ -98,6 +100,8 @@ app.use("/api/stylists", stylistRoutes);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/uploads", uploadsRouter);
 app.use("/api/inventory", inventoryRoutes);
+app.use("/api/coupons", couponRoutes);
+app.use("/api/offers", offerRoutes);
 
 /* ===============================
    404 HANDLER
