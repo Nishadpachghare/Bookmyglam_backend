@@ -143,7 +143,9 @@ async function start() {
     console.error(
       "❌ MongoDB connection failed. Check MONGO_URI and Atlas whitelist."
     );
-    process.exit(1);
+    console.warn(
+      "⚠️  Continuing without DB connection. API routes requiring DB will return errors until MONGO_URI is configured."
+    );
   }
 
   app.listen(PORT, async () => {
@@ -161,4 +163,15 @@ async function start() {
   });
 }
 
-start();
+const isServerless =
+  Boolean(process.env.VERCEL) ||
+  Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
+  Boolean(process.env.FUNCTIONS_WORKER_RUNTIME);
+
+// In serverless environments (e.g., Vercel), do not start an HTTP listener.
+// Instead, export the Express app and let the platform run it.
+if (!isServerless) {
+  start();
+} else {
+  connectDB();
+}
