@@ -12,8 +12,13 @@ export const createOffer = async (req, res) => {
 
     let imageUrl = "";
     if (req.file) {
-      const result = await cloudinary.uploader.upload(req.file.path, { folder: "offers" });
-      imageUrl = result.secure_url;
+      // When using CloudinaryStorage, multer already uploads the file.
+      // Use the provided URL if available; otherwise, fall back to uploading.
+      imageUrl = req.file.path || req.file.secure_url || req.file.url || "";
+      if (!imageUrl && req.file.path) {
+        const result = await cloudinary.uploader.upload(req.file.path, { folder: "offers" });
+        imageUrl = result.secure_url;
+      }
     }
 
     const offer = await Offer.create({
@@ -73,8 +78,13 @@ export const updateOffer = async (req, res) => {
 
     // Handle File Upload if present in update
     if (req.file) {
-      const result = await cloudinary.uploader.upload(req.file.path, { folder: "offers" });
-      updateData.image = result.secure_url;
+      updateData.image = req.file.path || req.file.secure_url || req.file.url || updateData.image;
+
+      // Fallback: if multer did not provide a URL, upload manually from disk
+      if (!updateData.image && req.file.path) {
+        const result = await cloudinary.uploader.upload(req.file.path, { folder: "offers" });
+        updateData.image = result.secure_url;
+      }
     }
 
     // Handle parsed services if sent as string

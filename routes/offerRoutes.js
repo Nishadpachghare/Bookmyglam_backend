@@ -1,5 +1,7 @@
 import express from "express";
 import multer from "multer";
+import { CloudinaryStorage } from "multer-storage-cloudinary";
+import cloudinary from "../config/cloudinary.js";
 import {
   createOffer,
   getOffers,
@@ -10,8 +12,15 @@ import {
 
 const router = express.Router();
 
-// Setup Multer for handling file uploads
-const upload = multer({ dest: "uploads/" });
+// Setup Multer (Cloudinary-backed) for serverless-safe uploads
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "offers",
+    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+  },
+});
+const upload = multer({ storage });
 
 // Test Route
 router.get("/test", (req, res) => {
