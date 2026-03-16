@@ -205,6 +205,12 @@ export const createPaymentOrder = async (req,res)=>{
 
     const {bookingId,amount} = req.body;
 
+    if (!process.env.CASHFREE_APP_ID || !process.env.CASHFREE_SECRET_KEY) {
+      return res.status(500).json({
+        message: "Cashfree payment gateway not configured. Set CASHFREE_APP_ID and CASHFREE_SECRET_KEY."
+      });
+    }
+
     const booking = await Booking.findById(bookingId);
 
     if(!booking){
@@ -280,6 +286,13 @@ export const verifyPayment = async (req,res)=>{
   try{
 
     const {orderId} = req.body;
+
+    if (!process.env.CASHFREE_APP_ID || !process.env.CASHFREE_SECRET_KEY) {
+      return res.status(500).json({
+        ok:false,
+        message: "Cashfree payment gateway not configured. Set CASHFREE_APP_ID and CASHFREE_SECRET_KEY."
+      });
+    }
 
     const booking = await Booking.findOne({
       paymentOrderId:orderId
