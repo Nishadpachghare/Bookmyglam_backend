@@ -111,6 +111,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/bookings", bookingRoutes);
 // mounted route for managing services (lowercase path is more conventional)
 app.use("/api/manageservices", manageServiceRoutes);
+// support uppercase path from bad frontend requests (some build artifacts may accidentally use uppercase)
+app.use("/api/Manageservices", manageServiceRoutes);
 app.use("/api/stylists", stylistRoutes);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/uploads", uploadsRouter);
