@@ -21,10 +21,14 @@ export const addService = async (req, res) => {
 // Get all services
 export const getServices = async (req, res) => {
   try {
+    if (req.isDbConnected === false || req.isDbConnected === undefined) {
+      return res.status(503).json({ ok: false, message: "Database unavailable", data: [] });
+    }
+
     const services = await Service.find().sort({ createdAt: -1 });
-    res.status(200).json(services);
+    res.status(200).json({ ok: true, data: services });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ ok: false, message: error.message, data: [] });
   }
 };
 

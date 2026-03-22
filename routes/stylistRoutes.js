@@ -81,6 +81,10 @@ router.post("/", upload.single("photo"), async (req, res) => {
 //    ?role=senior      -> filter by role etc (can be extended later)
 router.get("/", async (req, res) => {
   try {
+    if (req.isDbConnected === false || req.isDbConnected === undefined) {
+      return res.status(503).json({ ok: false, message: "Database unavailable", data: [] });
+    }
+
     // build a simple filter object from recognized query params
     const filter = {};
     if (req.query.status) filter.status = req.query.status;
@@ -89,7 +93,7 @@ router.get("/", async (req, res) => {
     const stylists = await Stylist.find(filter);
     res.json({ ok: true, data: stylists });
   } catch (err) {
-    res.status(500).json({ ok: false, message: "Failed to fetch stylists", error: err.message });
+    res.status(500).json({ ok: false, message: "Failed to fetch stylists", error: err.message, data: [] });
   }
 });
 
