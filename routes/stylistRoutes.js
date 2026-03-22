@@ -82,10 +82,10 @@ router.post("/", upload.single("photo"), async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     if (req.isDbConnected === false || req.isDbConnected === undefined) {
-      return res.status(503).json({ ok: false, message: "Database unavailable", data: [] });
+      // graceful fallback for transient DB startup delays; frontend can retry
+      return res.json({ ok: false, message: "Database currently unavailable, please retry", data: [] });
     }
 
-    // build a simple filter object from recognized query params
     const filter = {};
     if (req.query.status) filter.status = req.query.status;
     if (req.query.role) filter.role = req.query.role;

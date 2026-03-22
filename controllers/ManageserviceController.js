@@ -22,15 +22,15 @@ export const addService = async (req, res) => {
 export const getServices = async (req, res) => {
   try {
     if (!process.env.MONGO_URI) {
-      return res.status(503).json({ ok: false, message: "MONGO_URI not configured", data: [] });
+      return res.json({ ok: false, message: "MONGO_URI not configured", data: [] });
     }
 
     if (req.isDbConnected === false || req.isDbConnected === undefined) {
-      return res.status(503).json({ ok: false, message: "Database unavailable", data: [] });
+      return res.json({ ok: false, message: "Database currently unavailable, please retry", data: [] });
     }
 
     const services = await Service.find().sort({ createdAt: -1 });
-    res.status(200).json({ ok: true, data: services });
+    res.json({ ok: true, data: services });
   } catch (error) {
     console.error("getServices error:", error);
     res.status(500).json({ ok: false, message: error.message, data: [] });

@@ -103,6 +103,16 @@ app.get("/", (req, res) => {
   res.json({ ok: true, message: "✅ Salon backend running - CORS FIXED" });
 });
 
+// Minimal health endpoint for Vercel/monitoring
+app.get("/api/healthz", (req, res) => {
+  const connected = mongoose.connection.readyState === 1;
+  res.json({
+    ok: connected,
+    mongodb: connected ? "connected" : "disconnected",
+    timestamp: new Date().toISOString(),
+  });
+});
+
 /* ===============================
    API ROUTES
 ================================ */
