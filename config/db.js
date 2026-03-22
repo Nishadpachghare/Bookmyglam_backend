@@ -39,7 +39,15 @@ const connectDB = async ({ retries = defaultRetries, delay = defaultDelay } = {}
   cachedPromise = (async () => {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        const conn = await mongoose.connect(uri);
+const conn = await mongoose.connect(uri, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+    serverSelectionTimeoutMS: 10000,
+    connectTimeoutMS: 10000,
+    socketTimeoutMS: 45000,
+    family: 4,
+    bufferCommands: false,
+  });
         console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
         cachedConnection = conn;
         isConnected = true;

@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Offer from "../models/offer.js";
 import cloudinary from "../config/cloudinary.js";
 
@@ -42,6 +43,10 @@ export const createOffer = async (req, res) => {
 // GET ALL OFFERS
 export const getOffers = async (req, res) => {
   try {
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ success: false, error: "Database not connected" });
+    }
+
     const offers = await Offer.find().sort({ createdAt: -1 });
     res.status(200).json({ success: true, data: offers });
   } catch (error) {
@@ -52,6 +57,10 @@ export const getOffers = async (req, res) => {
 // GET ACTIVE OFFERS
 export const getActiveOffers = async (req, res) => {
   try {
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ success: false, error: "Database not connected" });
+    }
+
     const now = new Date();
     const offers = await Offer.find({ published: true }).sort({ createdAt: -1 });
 
