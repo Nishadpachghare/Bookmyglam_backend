@@ -1,87 +1,44 @@
 import mongoose from "mongoose";
 
-const isServerless =
-  Boolean(process.env.VERCEL) ||
-  Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
-  Boolean(process.env.FUNCTIONS_WORKER_RUNTIME);
+let cached = global.mongoose;
 
-// Cache connection across Lambda invocations / hot reloads
-let cachedConnection = null;
-let cachedPromise = null;
-let isConnected = false;
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
 
-const defaultRetries = isServerless ? 3 : 5;
-const defaultDelay = isServerless ? 2000 : 5000;
+const connectDB = async () => {
+  const MONGO_URI = process.env.MONGO_URI;
 
-const connectDB = async ({ retries = defaultRetries, delay = defaultDelay } = {}) => {
+  if (!MONGO_URI) {
+    throw new Error("❌ MONGO_URI is missing in environment variables");
+  }
+
   // Already connected
-  if (isConnected && mongoose.connection.readyState === 1) {
-    return cachedConnection;
+  if (cached.conn) {
+    console.log("⚡ Using existing DB connection");
+    return cached.conn;
   }
 
-  // Connection exists but flag is stale
-  if (cachedConnection && mongoose.connection.readyState === 1) {
-    isConnected = true;
-    return cachedConnection;
+  // Create connection if not exists
+  if (!cached.promise) {
+    console.log("⏳ Connecting to MongoDB...");
+
+    cached.promise = mongoose.connect(MONGO_URI, {
+      bufferCommands: false,
+      serverSelectionTimeoutMS: 10000,
+    });
   }
 
-  // Connection in progress — reuse the same promise
-  if (cachedPromise) {
-    return cachedPromise;
+  try {
+    cached.conn = await cached.promise;
+    console.log("✅ MongoDB Connected");
+  } catch (error) {
+    cached.promise = null;
+    console.error("❌ MongoDB Error:", error.message);
+    throw error;
   }
 
-  const uri = process.env.MONGO_URI;
-  if (!uri) {
-    console.warn("⚠️  MONGO_URI not set — skipping DB connection (dev only)");
-    return null;
-  }
-
-  cachedPromise = (async () => {
-    for (let attempt = 1; attempt <= retries; attempt++) {
-      try {
-        const conn = await mongoose.connect(uri, {
-          // NOTE: useNewUrlParser & useUnifiedTopology are removed in Mongoose 6+
-          serverSelectionTimeoutMS: 10000,
-          connectTimeoutMS: 10000,
-          socketTimeoutMS: 45000,
-          family: 4,           // Force IPv4 (avoids IPv6 DNS issues on some hosts)
-          bufferCommands: false, // Fail fast if not connected, don't queue ops
-        });
-
-        console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
-        cachedConnection = conn;
-        isConnected = true;
-
-        mongoose.connection.on("disconnected", () => {
-          console.warn("⚠️ MongoDB disconnected");
-          isConnected = false;
-          cachedPromise = null; // Allow reconnection attempts
-        });
-
-        mongoose.connection.on("reconnected", () => {
-          console.log("✅ MongoDB reconnected");
-          isConnected = true;
-        });
-
-        return conn;
-      } catch (error) {
-        console.error(
-          `❌ MongoDB connection failed (attempt ${attempt}/${retries}): ${error.message}`
-        );
-        if (attempt < retries) {
-          console.log(`⏳ Retrying in ${Math.round(delay / 1000)}s...`);
-          await new Promise((res) => setTimeout(res, delay));
-        }
-      }
-    }
-
-    console.error("❌ All MongoDB connection attempts failed.");
-    cachedPromise = null;
-    isConnected = false;
-    return null;
-  })();
-
-  return cachedPromise;
+  return cached.conn;
 };
 
 export default connectDB;

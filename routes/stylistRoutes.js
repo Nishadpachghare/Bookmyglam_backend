@@ -6,7 +6,6 @@ import Stylist from "../models/Stylist.js";
 
 const router = express.Router();
 
-// ===== MULTER + Cloudinary SETUP =====
 const storage = new CloudinaryStorage({
   cloudinary,
   params: {
@@ -16,23 +15,21 @@ const storage = new CloudinaryStorage({
 });
 const upload = multer({ storage });
 
-// ===== ADD NEW STYLIST =====
+// ADD NEW STYLIST
 router.post("/", upload.single("photo"), async (req, res) => {
   try {
-    // Accessing text fields (formData automatically parsed by multer)
-    const { name, phone, email, role } = req.body;
+    if (!req.isDbConnected) {
+      return res.status(503).json({ ok: false, message: "Database unavailable, please retry" });
+    }
 
+    const { name, phone, email, role } = req.body;
     if (!name || !phone || !email || !role) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // normalize email
     const normalizedEmail = email.trim().toLowerCase();
-
-    // Prepare photo URL (CloudinaryStorage exposes `path` or secure_url)
-    const photoUrl = req.file && (req.file.path || req.file.secure_url || req.file.url)
-      ? (req.file.path || req.file.secure_url || req.file.url)
-      : "";
+    const photoUrl =
+      req.file?.path || req.file?.secure_url || req.file?.url || "";
 
     const newStylist = new Stylist({
       name: name.trim(),
@@ -45,24 +42,22 @@ router.post("/", upload.single("photo"), async (req, res) => {
 
     const savedStylist = await newStylist.save();
 
-    // Send welcome email (best-effort) and record status
     let welcomeEmailStatus = "none";
     try {
       const { sendEmail } = await import("../Utils/emailSender.js");
       const { stylistWelcomeHtml } = await import("../Utils/emailTemplates.js");
       const html = stylistWelcomeHtml({ name: savedStylist.name, role: savedStylist.role });
-      const emailResult = await sendEmail({ to: savedStylist.email, subject: "Welcome to Our Salon - Next Steps", html });
-      if (emailResult && emailResult.ok) {
-        welcomeEmailStatus = emailResult.fallback ? "fallback" : "sent";
-        console.log(`[Welcome Email] to ${savedStylist.email} status: ${welcomeEmailStatus}`);
-      } else {
-        welcomeEmailStatus = "failed";
-        console.warn(`[Welcome Email] unexpected result for ${savedStylist.email}:`, emailResult);
-      }
+      const emailResult = await sendEmail({
+        to: savedStylist.email,
+        subject: "Welcome to Our Salon - Next Steps",
+        html,
+      });
+      welcomeEmailStatus = emailResult?.ok
+        ? emailResult.fallback ? "fallback" : "sent"
+        : "failed";
     } catch (emailErr) {
       welcomeEmailStatus = "error";
       console.warn("Welcome email failed:", emailErr?.message || emailErr);
-      // don't block stylist creation on email failure
     }
 
     res.status(201).json({ message: "Stylist added successfully", stylist: savedStylist, welcomeEmailStatus });
@@ -75,15 +70,11 @@ router.post("/", upload.single("photo"), async (req, res) => {
   }
 });
 
-// ===== GET ALL STYLISTS =====
-// optional query params:
-//    ?status=active   -> return only stylists with matching status
-//    ?role=senior      -> filter by role etc (can be extended later)
+// GET ALL STYLISTS
 router.get("/", async (req, res) => {
   try {
-    if (req.isDbConnected === false || req.isDbConnected === undefined) {
-      // graceful fallback for transient DB startup delays; frontend can retry
-      return res.json({ ok: false, message: "Database currently unavailable, please retry", data: [] });
+    if (!req.isDbConnected) {
+      return res.status(200).json({ ok: false, message: "Database unavailable, please retry", data: [] });
     }
 
     const filter = {};
@@ -97,14 +88,11 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ===== SET STYLIST AS INACTIVE =====
+// SET INACTIVE
 router.put("/:id/inactive", async (req, res) => {
   try {
-    const stylist = await Stylist.findByIdAndUpdate(
-      req.params.id,
-      { status: "inactive" },
-      { new: true }
-    );
+    if (!req.isDbConnected) return res.status(503).json({ ok: false, message: "Database unavailable" });
+    const stylist = await Stylist.findByIdAndUpdate(req.params.id, { status: "inactive" }, { new: true });
     if (!stylist) return res.status(404).json({ message: "Stylist not found" });
     res.json({ message: "Stylist marked as inactive", stylist });
   } catch (err) {
@@ -112,14 +100,11 @@ router.put("/:id/inactive", async (req, res) => {
   }
 });
 
-// ===== SET STYLIST AS ACTIVE =====
+// SET ACTIVE
 router.put("/:id/active", async (req, res) => {
   try {
-    const stylist = await Stylist.findByIdAndUpdate(
-      req.params.id,
-      { status: "active" },
-      { new: true }
-    );
+    if (!req.isDbConnected) return res.status(503).json({ ok: false, message: "Database unavailable" });
+    const stylist = await Stylist.findByIdAndUpdate(req.params.id, { status: "active" }, { new: true });
     if (!stylist) return res.status(404).json({ message: "Stylist not found" });
     res.json({ message: "Stylist reactivated", stylist });
   } catch (err) {
@@ -127,9 +112,10 @@ router.put("/:id/active", async (req, res) => {
   }
 });
 
-// ===== DELETE STYLIST =====
+// DELETE
 router.delete("/:id", async (req, res) => {
   try {
+    if (!req.isDbConnected) return res.status(503).json({ ok: false, message: "Database unavailable" });
     const stylist = await Stylist.findByIdAndDelete(req.params.id);
     if (!stylist) return res.status(404).json({ message: "Stylist not found" });
     res.json({ message: "Stylist deleted successfully" });

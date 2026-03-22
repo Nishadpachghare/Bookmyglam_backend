@@ -3,6 +3,10 @@ import Service from "../models/Manageservice.js";
 // Add new service
 export const addService = async (req, res) => {
   try {
+    if (!req.isDbConnected) {
+      return res.status(503).json({ ok: false, message: "Database unavailable, please retry", data: [] });
+    }
+
     const { service, description, duration, price } = req.body;
 
     if (!service || !description || !duration || !price) {
@@ -14,6 +18,7 @@ export const addService = async (req, res) => {
 
     res.status(201).json({ message: "Service added successfully", service: newService });
   } catch (error) {
+    console.error("addService error:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -21,12 +26,9 @@ export const addService = async (req, res) => {
 // Get all services
 export const getServices = async (req, res) => {
   try {
-    if (!process.env.MONGO_URI) {
-      return res.json({ ok: false, message: "MONGO_URI not configured", data: [] });
-    }
-
-    if (req.isDbConnected === false || req.isDbConnected === undefined) {
-      return res.json({ ok: false, message: "Database currently unavailable, please retry", data: [] });
+    if (!req.isDbConnected) {
+      // Return empty gracefully — frontend can retry without crashing
+      return res.status(200).json({ ok: false, message: "Database unavailable, please retry", data: [] });
     }
 
     const services = await Service.find().sort({ createdAt: -1 });
@@ -40,8 +42,15 @@ export const getServices = async (req, res) => {
 // Delete a service
 export const deleteService = async (req, res) => {
   try {
+    if (!req.isDbConnected) {
+      return res.status(503).json({ ok: false, message: "Database unavailable" });
+    }
+
     const { id } = req.params;
-    await Service.findByIdAndDelete(id);
+    const deleted = await Service.findByIdAndDelete(id);
+
+    if (!deleted) return res.status(404).json({ message: "Service not found" });
+
     res.status(200).json({ message: "Service deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -51,6 +60,10 @@ export const deleteService = async (req, res) => {
 // Update a service
 export const updateService = async (req, res) => {
   try {
+    if (!req.isDbConnected) {
+      return res.status(503).json({ ok: false, message: "Database unavailable" });
+    }
+
     const { id } = req.params;
     const { service, description, duration, price } = req.body;
 
@@ -64,14 +77,9 @@ export const updateService = async (req, res) => {
       { new: true }
     );
 
-    if (!updatedService) {
-      return res.status(404).json({ message: "Service not found" });
-    }
+    if (!updatedService) return res.status(404).json({ message: "Service not found" });
 
-    res.status(200).json({ 
-      message: "Service updated successfully", 
-      service: updatedService 
-    });
+    res.status(200).json({ message: "Service updated successfully", service: updatedService });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

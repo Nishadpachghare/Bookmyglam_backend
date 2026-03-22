@@ -2,8 +2,8 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-import connectDB from "./config/db.js";
 import mongoose from "mongoose";
+import connectDB from "./config/db.js";
 
 // ROUTES
 import authRoutes from "./routes/authRoutes.js";
@@ -18,100 +18,93 @@ import offerRoutes from "./routes/offerRoutes.js";
 
 dotenv.config();
 
-console.log("[Startup] MONGO_URI detected:", process.env.MONGO_URI ? `${process.env.MONGO_URI.slice(0, 30)}...` : "<undefined>");
+console.log(
+  "[Startup] MONGO_URI detected:",
+  process.env.MONGO_URI
+    ? `${process.env.MONGO_URI.slice(0, 30)}...`
+    : "<undefined>"
+);
 
 const app = express();
 
 /* ===============================
-   🪵 REQUEST LOGGER
+   REQUEST LOGGER
 ================================ */
 app.use((req, res, next) => {
-  console.log(`[${req.method}] ${req.originalUrl} - Origin: ${req.headers.origin || 'none'}`);
+  console.log(`[${req.method}] ${req.originalUrl} - Origin: ${req.headers.origin || "none"}`);
   next();
 });
 
 /* ===============================
-   🌐 CORS FIX (LOCAL + PRODUCTION)
+   CORS
 ================================ */
-
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
-  "https://book-my-glam-web.vercel.app"
+  "https://book-my-glam-web.vercel.app",
 ];
 
 app.use(
   cors({
-    origin: function (origin, callback) {
-
-      // allow requests with no origin (Postman / mobile apps)
+    origin: (origin, callback) => {
       if (!origin) return callback(null, true);
-
-      // allow all localhost ports
       const localhostRegex = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/;
-      if (localhostRegex.test(origin)) {
+      if (localhostRegex.test(origin) || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-
-      // allow production frontend
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
       return callback(new Error("Not allowed by CORS"));
     },
-
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "X-Requested-With",
-      "Accept",
-      "Origin"
-    ],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
     exposedHeaders: ["Set-Cookie"],
-    optionsSuccessStatus: 204
+    optionsSuccessStatus: 204,
   })
 );
 
 /* ===============================
-   MIDDLEWARE
+   BODY PARSING
 ================================ */
-
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Healthcheck middleware: keep DB connection attempts up to date and fail fast if unavailable.
+/* ===============================
+   DB MIDDLEWARE — fixed for serverless
+   Always attempt connection, attach flag,
+   never block with 503 here (routes handle it)
+================================ */
 app.use(async (req, res, next) => {
-  if (req.path.startsWith("/api") && mongoose.connection.readyState !== 1) {
-    const conn = await connectDB();
-    const connected = conn && mongoose.connection.readyState === 1;
-    req.isDbConnected = connected;
-    if (!connected) {
-      return res.status(503).json({ ok: false, message: "Database not connected" });
-    }
+  // Skip non-API and health routes
+  if (!req.path.startsWith("/api") || req.path === "/api/healthz") {
+    req.isDbConnected = mongoose.connection.readyState === 1;
     return next();
   }
 
-  req.isDbConnected = mongoose.connection.readyState === 1;
-  if (req.path.startsWith("/api") && !req.isDbConnected) {
-    return res.status(503).json({ ok: false, message: "Database not connected" });
+  // Already connected — fast path
+  if (mongoose.connection.readyState === 1) {
+    req.isDbConnected = true;
+    return next();
   }
 
-  next();
+  // Not connected — try to connect (important for serverless cold starts)
+  try {
+    const conn = await connectDB();
+    req.isDbConnected = !!(conn && mongoose.connection.readyState === 1);
+  } catch {
+    req.isDbConnected = false;
+  }
+
+  next(); // always continue — let each route decide how to handle no-DB
 });
 
 /* ===============================
-   TEST ROUTE
+   HEALTH CHECK
 ================================ */
-
 app.get("/", (req, res) => {
-  res.json({ ok: true, message: "✅ Salon backend running - CORS FIXED" });
+  res.json({ ok: true, message: "✅ Salon backend running" });
 });
 
-// Minimal health endpoint for Vercel/monitoring
 app.get("/api/healthz", (req, res) => {
   const connected = mongoose.connection.readyState === 1;
   res.json({
@@ -124,13 +117,10 @@ app.get("/api/healthz", (req, res) => {
 /* ===============================
    API ROUTES
 ================================ */
-
 app.use("/api/auth", authRoutes);
 app.use("/api/bookings", bookingRoutes);
-// mounted route for managing services (lowercase path is more conventional)
 app.use("/api/manageservices", manageServiceRoutes);
-// support uppercase path from bad frontend requests (some build artifacts may accidentally use uppercase)
-app.use("/api/Manageservices", manageServiceRoutes);
+app.use("/api/Manageservices", manageServiceRoutes); // legacy alias
 app.use("/api/stylists", stylistRoutes);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/uploads", uploadsRouter);
@@ -139,58 +129,42 @@ app.use("/api/coupons", couponRoutes);
 app.use("/api/offers", offerRoutes);
 
 /* ===============================
-   404 HANDLER
+   404
 ================================ */
-
 app.use((req, res) => {
-  res.status(404).json({
-    ok: false,
-    message: "Route not found",
-    path: req.originalUrl,
-  });
+  res.status(404).json({ ok: false, message: "Route not found", path: req.originalUrl });
 });
 
 /* ===============================
    ERROR HANDLER
 ================================ */
-
 app.use((err, req, res, next) => {
   console.error("🔥 Error:", err.message);
-  res.status(500).json({
-    ok: false,
-    error: err.message || "Internal Server Error",
-  });
+  res.status(500).json({ ok: false, error: err.message || "Internal Server Error" });
 });
 
 /* ===============================
-   ▶️ START SERVER
+   START
 ================================ */
-
 const PORT = process.env.PORT || 5000;
 
-// export for integration tests or serverless adapters
 export default app;
+
+const isServerless =
+  Boolean(process.env.VERCEL) ||
+  Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
+  Boolean(process.env.FUNCTIONS_WORKER_RUNTIME);
 
 async function start() {
   const conn = await connectDB();
-
   if (!conn) {
-    console.error(
-      "❌ MongoDB connection failed. Check MONGO_URI and Atlas whitelist."
-    );
-    console.warn(
-      "⚠️  Continuing without DB connection. API routes requiring DB will return errors until MONGO_URI is configured."
-    );
+    console.warn("⚠️  Starting without DB — routes requiring DB will return errors.");
   }
 
   app.listen(PORT, async () => {
     console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`🌐 CORS: Localhost + Production allowed`);
-
     try {
-      const { startReminderScheduler } = await import(
-        "./scheduler/reminderScheduler.js"
-      );
+      const { startReminderScheduler } = await import("./scheduler/reminderScheduler.js");
       startReminderScheduler();
     } catch (err) {
       console.warn("Scheduler not started:", err.message);
@@ -198,23 +172,12 @@ async function start() {
   });
 }
 
-process.on("unhandledRejection", (reason) => {
-  console.error("🔥 Unhandled Rejection:", reason);
-});
+process.on("unhandledRejection", (reason) => console.error("🔥 Unhandled Rejection:", reason));
+process.on("uncaughtException", (err) => console.error("🔥 Uncaught Exception:", err));
 
-process.on("uncaughtException", (err) => {
-  console.error("🔥 Uncaught Exception:", err);
-});
-
-const isServerless =
-  Boolean(process.env.VERCEL) ||
-  Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
-  Boolean(process.env.FUNCTIONS_WORKER_RUNTIME);
-
-// In serverless environments (e.g., Vercel), do not start an HTTP listener.
-// Instead, export the Express app and let the platform run it.
 if (!isServerless) {
   start();
 } else {
-  connectDB();
+  // Warm up connection on serverless cold start — don't await, non-blocking
+  connectDB().catch((e) => console.warn("Serverless DB warmup failed:", e.message));
 }
