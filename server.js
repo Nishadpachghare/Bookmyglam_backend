@@ -83,14 +83,14 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Healthcheck middleware: if DB isn't connected yet, try to connect and, if still not connected, return 503.
-// This helps with serverless cold-start timing and prevents immediate failure when a transient connection is resolving.
+// Healthcheck middleware: attempt DB (re)connect but do not auto-terminate requests.
+// This will let routes respond with controlled errors or fallback data instead of always 503.
 app.use(async (req, res, next) => {
   if (req.path.startsWith("/api") && mongoose.connection.readyState !== 1) {
-    const conn = await connectDB();
-    if (!conn || mongoose.connection.readyState !== 1) {
-      return res.status(503).json({ ok: false, message: "Database not connected" });
-    }
+    await connectDB();
+    req.isDbConnected = mongoose.connection.readyState === 1;
+  } else {
+    req.isDbConnected = mongoose.connection.readyState === 1;
   }
   next();
 });

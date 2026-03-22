@@ -171,9 +171,13 @@ export const uploadLink = async (req, res) => {
  */
 export const listMedia = async (req, res) => {
   try {
-    // Agar query mein 'public=true' hai toh sirf published items bhejein
+    if (!req.isDbConnected) {
+      // on cold-start or transient connectivity issues, return empty list instead of 503
+      console.warn("listMedia called while DB disconnected; returning empty list");
+      return res.json({ ok: true, items: [] });
+    }
+
     const filter = req.query.public === 'true' ? { publishedToWeb: true } : {};
-    
     const items = await Media.find(filter).sort({ createdAt: -1 });
     res.json({ ok: true, items });
   } catch (err) {
