@@ -87,9 +87,9 @@ router.get("/", async (req, res) => {
     if (req.query.role) filter.role = req.query.role;
 
     const stylists = await Stylist.find(filter);
-    res.json(stylists);
+    res.json({ ok: true, data: stylists });
   } catch (err) {
-    res.status(500).json({ message: "Failed to fetch stylists", error: err.message });
+    res.status(500).json({ ok: false, message: "Failed to fetch stylists", error: err.message });
   }
 });
 

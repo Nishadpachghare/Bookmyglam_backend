@@ -9,13 +9,19 @@ const isServerless =
 // (important for serverless platforms like Vercel)
 let cachedConnection = null;
 let cachedPromise = null;
+let isConnected = false;
 
 const defaultRetries = isServerless ? 3 : 5;
 const defaultDelay = isServerless ? 2000 : 5000;
 
 // Helper: connect with retries (useful for flaky networks / Atlas whitelist delays)
 const connectDB = async ({ retries = defaultRetries, delay = defaultDelay } = {}) => {
+  if (isConnected && mongoose.connection.readyState === 1) {
+    return cachedConnection;
+  }
+
   if (cachedConnection && mongoose.connection.readyState === 1) {
+    isConnected = true;
     return cachedConnection;
   }
 
@@ -36,6 +42,18 @@ const connectDB = async ({ retries = defaultRetries, delay = defaultDelay } = {}
         const conn = await mongoose.connect(uri);
         console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
         cachedConnection = conn;
+        isConnected = true;
+
+        mongoose.connection.on("disconnected", () => {
+          console.warn("⚠️ MongoDB disconnected");
+          isConnected = false;
+        });
+
+        mongoose.connection.on("reconnected", () => {
+          console.log("✅ MongoDB reconnected");
+          isConnected = true;
+        });
+
         return conn;
       } catch (error) {
         console.error(`❌ Error connecting to MongoDB (attempt ${attempt}/${retries}): ${error.message}`);
