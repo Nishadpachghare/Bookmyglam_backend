@@ -5,6 +5,7 @@ import cloudinary from "../config/cloudinary.js";
 import {
   createOffer,
   getOffers,
+  getActiveOffers,
   deleteOffer,
   publishOffer,
   updateOffer,
@@ -32,6 +33,9 @@ router.post("/", upload.single("image"), createOffer);
 
 // GET ALL OFFERS
 router.get("/", getOffers);
+
+// GET ACTIVE OFFERS
+router.get("/active", getActiveOffers);
 
 // PUBLISH OFFER
 router.put("/publish/:id", publishOffer);

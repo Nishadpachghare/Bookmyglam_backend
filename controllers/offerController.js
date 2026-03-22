@@ -49,6 +49,28 @@ export const getOffers = async (req, res) => {
   }
 };
 
+// GET ACTIVE OFFERS
+export const getActiveOffers = async (req, res) => {
+  try {
+    const now = new Date();
+    const offers = await Offer.find({ published: true }).sort({ createdAt: -1 });
+
+    const activeOffers = offers.filter((offer) => {
+      const start = offer.startDate || offer.validFrom;
+      const end = offer.endDate || offer.validTill;
+
+      if (!start && !end) return true;
+      if (!start && end) return end >= now;
+      if (start && !end) return start <= now;
+      return start <= now && end >= now;
+    });
+
+    res.status(200).json({ success: true, data: activeOffers });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 // PUBLISH OFFER
 export const publishOffer = async (req, res) => {
   try {

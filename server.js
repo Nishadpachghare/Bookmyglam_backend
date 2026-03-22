@@ -81,11 +81,14 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Healthcheck middleware: if DB isn't connected yet, return 503 quickly.
-// This prevents serverless invocations from hanging while waiting for a DB connection.
-app.use((req, res, next) => {
+// Healthcheck middleware: if DB isn't connected yet, try to connect and, if still not connected, return 503.
+// This helps with serverless cold-start timing and prevents immediate failure when a transient connection is resolving.
+app.use(async (req, res, next) => {
   if (req.path.startsWith("/api") && mongoose.connection.readyState !== 1) {
-    return res.status(503).json({ ok: false, message: "Database not connected" });
+    const conn = await connectDB();
+    if (!conn || mongoose.connection.readyState !== 1) {
+      return res.status(503).json({ ok: false, message: "Database not connected" });
+    }
   }
   next();
 });

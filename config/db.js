@@ -10,8 +10,8 @@ const isServerless =
 let cachedConnection = null;
 let cachedPromise = null;
 
-const defaultRetries = isServerless ? 1 : 5;
-const defaultDelay = isServerless ? 1000 : 5000;
+const defaultRetries = isServerless ? 3 : 5;
+const defaultDelay = isServerless ? 2000 : 5000;
 
 // Helper: connect with retries (useful for flaky networks / Atlas whitelist delays)
 const connectDB = async ({ retries = defaultRetries, delay = defaultDelay } = {}) => {
