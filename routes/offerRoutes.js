@@ -1,49 +1,89 @@
+// routes/offerRoutes.js
 import express from "express";
-import multer from "multer";
-import { CloudinaryStorage } from "multer-storage-cloudinary";
-import cloudinary from "../config/cloudinary.js";
-import {
-  createOffer,
-  getOffers,
-  getActiveOffers,
-  deleteOffer,
-  publishOffer,
-  updateOffer,
-} from "../controllers/offerController.js";
+import Offer from "../models/Offer.js";
 
 const router = express.Router();
 
-// Setup Multer (Cloudinary-backed) for serverless-safe uploads
-const storage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: "offers",
-    allowed_formats: ["jpg", "jpeg", "png", "webp"],
-  },
+// GET /api/offers/active  ← yahi missing tha
+router.get("/active", async (req, res) => {
+  try {
+    if (!req.isDbConnected) {
+      return res.status(503).json({
+        ok: false,
+        message: "Database unavailable, please retry",
+        data: [],
+      });
+    }
+
+    const now = new Date();
+    const offers = await Offer.find({
+      isActive: true,
+      $or: [
+        { expiresAt: { $exists: false } },
+        { expiresAt: null },
+        { expiresAt: { $gt: now } },
+      ],
+    }).sort({ createdAt: -1 });
+
+    res.json({ ok: true, data: offers });
+  } catch (err) {
+    console.error("offers/active error:", err);
+    res.status(500).json({ ok: false, message: err.message, data: [] });
+  }
 });
-const upload = multer({ storage });
 
-// Test Route
-router.get("/test", (req, res) => {
-  res.json({ message: "Offer API working successfully" });
+// GET /api/offers
+router.get("/", async (req, res) => {
+  try {
+    if (!req.isDbConnected) {
+      return res.status(503).json({ ok: false, message: "Database unavailable", data: [] });
+    }
+    const offers = await Offer.find().sort({ createdAt: -1 });
+    res.json({ ok: true, data: offers });
+  } catch (err) {
+    res.status(500).json({ ok: false, message: err.message, data: [] });
+  }
 });
 
-// CREATE OFFER (with file upload middleware)
-router.post("/", upload.single("image"), createOffer);
+// POST /api/offers
+router.post("/", async (req, res) => {
+  try {
+    if (!req.isDbConnected) {
+      return res.status(503).json({ ok: false, message: "Database unavailable" });
+    }
+    const offer = await Offer.create(req.body);
+    res.status(201).json({ ok: true, data: offer });
+  } catch (err) {
+    res.status(500).json({ ok: false, message: err.message });
+  }
+});
 
-// GET ALL OFFERS
-router.get("/", getOffers);
+// PUT /api/offers/:id
+router.put("/:id", async (req, res) => {
+  try {
+    if (!req.isDbConnected) {
+      return res.status(503).json({ ok: false, message: "Database unavailable" });
+    }
+    const offer = await Offer.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!offer) return res.status(404).json({ ok: false, message: "Offer not found" });
+    res.json({ ok: true, data: offer });
+  } catch (err) {
+    res.status(500).json({ ok: false, message: err.message });
+  }
+});
 
-// GET ACTIVE OFFERS
-router.get("/active", getActiveOffers);
-
-// PUBLISH OFFER
-router.put("/publish/:id", publishOffer);
-
-// UPDATE OFFER (with file upload middleware for optional image updates)
-router.put("/:id", upload.single("image"), updateOffer);
-
-// DELETE OFFER
-router.delete("/:id", deleteOffer);
+// DELETE /api/offers/:id
+router.delete("/:id", async (req, res) => {
+  try {
+    if (!req.isDbConnected) {
+      return res.status(503).json({ ok: false, message: "Database unavailable" });
+    }
+    const offer = await Offer.findByIdAndDelete(req.params.id);
+    if (!offer) return res.status(404).json({ ok: false, message: "Offer not found" });
+    res.json({ ok: true, message: "Offer deleted" });
+  } catch (err) {
+    res.status(500).json({ ok: false, message: err.message });
+  }
+});
 
 export default router;

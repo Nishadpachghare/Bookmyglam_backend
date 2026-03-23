@@ -1,42 +1,20 @@
+// models/Offer.js
 import mongoose from "mongoose";
 
 const offerSchema = new mongoose.Schema(
   {
-    title: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    services: [
-      {
-        type: String, // Stores the names of the services selected in React
-      },
-    ],
-    description: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    discount: {
-      type: Number,
-      required: true,
-    },
-    // Supports both naming conventions for flexibility
-    startDate: { type: Date },
-    endDate: { type: Date },
-    validFrom: { type: Date },
-    validTill: { type: Date },
-    image: {
-      type: String, // Stores the URL of the uploaded image
-    },
-    published: {
-      type: Boolean,
-      default: false, // Offers start as drafts
-    },
+    title:       { type: String, required: true, trim: true },
+    description: { type: String, trim: true },
+    discount:    { type: Number, default: 0 },      // percentage or flat
+    discountType:{ type: String, enum: ["percentage", "flat"], default: "percentage" },
+    imageUrl:    { type: String, default: "" },
+    isActive:    { type: Boolean, default: true },
+    expiresAt:   { type: Date, default: null },      // null = no expiry
   },
   { timestamps: true }
 );
 
-const Offer = mongoose.model("Offer", offerSchema);
+// Index for fast active offer queries
+offerSchema.index({ isActive: 1, expiresAt: 1 });
 
-export default Offer;
+export default mongoose.models.Offer || mongoose.model("Offer", offerSchema);
