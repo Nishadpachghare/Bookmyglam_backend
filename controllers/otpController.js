@@ -1,4 +1,4 @@
-// controllers/otpController.js
+
 import Otp from "../models/Otp.js";
 import dayjs from "dayjs";
 import sendProvider from "../Utils/otpSender.js";

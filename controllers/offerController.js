@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import Offer from "../models/Offer.js";
+import offer from "../models/offer.js";
 import cloudinary from "../config/cloudinary.js";
 
 // CREATE
