@@ -18,6 +18,7 @@ import offerRoutes from "./routes/offerRoutes.js";
 
 dotenv.config();
 
+
 console.log(
   "[Startup] MONGO_URI detected:",
   process.env.MONGO_URI
@@ -68,6 +69,11 @@ app.use(
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+/* ===============================
+   STATIC FILES - SERVE UPLOADS
+================================ */
+app.use("/uploads", express.static("uploads"));
 
 /* ===============================
    DB MIDDLEWARE — fixed for serverless
@@ -148,8 +154,6 @@ app.use((err, req, res, next) => {
 ================================ */
 const PORT = process.env.PORT || 5000;
 
-export default app;
-
 const isServerless =
   Boolean(process.env.VERCEL) ||
   Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
@@ -181,3 +185,5 @@ if (!isServerless) {
   // Warm up connection on serverless cold start — don't await, non-blocking
   connectDB().catch((e) => console.warn("Serverless DB warmup failed:", e.message));
 }
+
+export default app;
