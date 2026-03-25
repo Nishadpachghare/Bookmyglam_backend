@@ -32,6 +32,28 @@ const BookingSchema = new mongoose.Schema(
       type: String,
     },
 
+    // Coupon and discount fields
+    couponCode: {
+      type: String,
+      default: null,
+    },
+    discountPercentage: {
+      type: Number,
+      default: 0,
+    },
+    discountAmount: {
+      type: Number,
+      default: 0,
+    },
+    totalAmount: {
+      type: Number,
+      default: 0,
+    },
+    finalAmount: {
+      type: Number,
+      default: 0,
+    },
+
     // new fields for reminders and status
     status: {
       type: String,

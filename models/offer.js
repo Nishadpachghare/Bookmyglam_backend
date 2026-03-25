@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 
 const offerSchema = new mongoose.Schema(
   {
-    title:       { type: String, required: true, trim: true },
+    title:       { type: String, required: true, trim: true, unique: true },
     description: { type: String, trim: true, default: "" },
     discount:    { type: Number, required: true, min: 0 },
     image:       { type: String, default: "" },
@@ -11,6 +11,7 @@ const offerSchema = new mongoose.Schema(
     startDate:   { type: Date, default: null },
     endDate:     { type: Date, default: null },
     published:   { type: Boolean, default: false },
+    active:      { type: Boolean, default: true }, // Active/Inactive status for admin control
   },
   { timestamps: true }
 );

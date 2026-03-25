@@ -1,5 +1,6 @@
 import Booking from "../models/Booking.js";
 import Otp from "../models/Otp.js";
+import Coupon from "../models/coupon.js";
 import axios from "axios";
 import { sendEmail } from "../Utils/emailSender.js";
 import { bookingConfirmationHtml, cancellationNotificationHtml } from "../Utils/emailTemplates.js";
@@ -20,7 +21,8 @@ export const createBooking = async (req, res) => {
       date,
       time,
       mode,
-      stylist
+      stylist,
+      couponCode
     } = req.body;
 
     // simple validation to prevent Mongoose from throwing
@@ -48,6 +50,74 @@ export const createBooking = async (req, res) => {
       duration: s.duration || ""
     }));
 
+    // Calculate total amount from services
+    const totalAmount = services.reduce((total, s) => total + s.price, 0);
+
+    // Initialize discount data
+    let discountPercentage = 0;
+    let discountAmount = 0;
+    let finalAmount = totalAmount;
+    let appliedCouponCode = null;
+
+    // Validate and apply coupon if provided
+    if (couponCode && couponCode.trim()) {
+      try {
+        const coupon = await Coupon.findOne({ code: couponCode.toUpperCase() });
+
+        if (!coupon) {
+          return res.status(400).json({
+            ok: false,
+            message: "Coupon code is invalid or not available"
+          });
+        }
+
+        // Check if coupon has expiry date and if it's expired
+        if (coupon.expiryDate && new Date() > new Date(coupon.expiryDate)) {
+          return res.status(400).json({
+            ok: false,
+            message: "Coupon code has expired"
+          });
+        }
+
+        // Check if coupon is valid from date
+        if (coupon.validFrom && new Date() < new Date(coupon.validFrom)) {
+          return res.status(400).json({
+            ok: false,
+            message: "Coupon is not yet valid"
+          });
+        }
+
+        // Check if coupon is still valid until date
+        if (coupon.validTill && new Date() > new Date(coupon.validTill)) {
+          return res.status(400).json({
+            ok: false,
+            message: "Coupon code has expired"
+          });
+        }
+
+        // Check minimum amount requirement
+        if (coupon.minAmount && totalAmount < coupon.minAmount) {
+          return res.status(400).json({
+            ok: false,
+            message: `Minimum booking amount of ₹${coupon.minAmount} required for this coupon`
+          });
+        }
+
+        // Apply coupon
+        discountPercentage = coupon.discount;
+        discountAmount = Math.round((totalAmount * coupon.discount) / 100);
+        finalAmount = totalAmount - discountAmount;
+        appliedCouponCode = coupon.code;
+
+      } catch (error) {
+        console.error("Coupon validation error:", error);
+        return res.status(400).json({
+          ok: false,
+          message: "Error validating coupon"
+        });
+      }
+    }
+
     const booking = await Booking.create({
 
       customerName,
@@ -62,6 +132,13 @@ export const createBooking = async (req, res) => {
 
       mode: mode || "offline",
       paymentStatus:"Pending",
+      
+      // Coupon and discount fields
+      couponCode: appliedCouponCode,
+      discountPercentage,
+      discountAmount,
+      totalAmount,
+      finalAmount,
       // status defaults to Scheduled via schema
       // reminderSent flag also handled by schema
     });
@@ -74,7 +151,10 @@ export const createBooking = async (req, res) => {
         services: booking.services,
         date: booking.date,
         time: booking.time,
-        bookingId: booking._id
+        bookingId: booking._id,
+        totalAmount: booking.totalAmount,
+        discountAmount: booking.discountAmount,
+        finalAmount: booking.finalAmount
       });
 
       await sendEmail({

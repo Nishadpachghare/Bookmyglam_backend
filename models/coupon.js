@@ -30,6 +30,10 @@ const couponSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    active: {
+      type: Boolean,
+      default: true, // Coupons are active by default
+    },
   },
   { timestamps: true }
 );

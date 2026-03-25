@@ -188,3 +188,26 @@ export const unpublishOffer = async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 };
+
+// ── TOGGLE ACTIVE STATUS ──────────────────────────────────────────────────────
+export const toggleOfferActive = async (req, res) => {
+  try {
+    if (!checkDb(req, res)) return;
+    
+    const offer = await Offer.findById(req.params.id);
+    if (!offer) return res.status(404).json({ success: false, error: "Offer not found" });
+
+    // Toggle active status
+    offer.active = !offer.active;
+    await offer.save();
+
+    res.json({ 
+      success: true, 
+      data: offer, 
+      message: `Offer ${offer.active ? "activated" : "deactivated"} successfully` 
+    });
+  } catch (err) {
+    console.error("toggleOfferActive error:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+};

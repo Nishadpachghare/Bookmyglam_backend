@@ -8,6 +8,7 @@ import {
   deleteOffer,
   publishOffer,
   unpublishOffer,
+  toggleOfferActive,
 } from "../controllers/offerController.js";
 
 const router = express.Router();
@@ -59,6 +60,9 @@ router.post("/", uploadSingle, createOffer);
 // ── PUBLISH / UNPUBLISH — must be before /:id ─────────────────────────────────
 router.put("/publish/:id",   publishOffer);
 router.put("/unpublish/:id", unpublishOffer);
+
+// ── TOGGLE ACTIVE STATUS — must be before /:id ───────────────────────────────
+router.put("/:id/toggle-active", toggleOfferActive);
 
 // ── UPDATE ────────────────────────────────────────────────────────────────────
 router.put("/:id", uploadSingle, updateOffer);
