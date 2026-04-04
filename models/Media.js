@@ -2,7 +2,7 @@
 import mongoose from "mongoose";
 
 const MediaSchema = new mongoose.Schema({
-  type: { type: String, enum: ["image","video","link"], required: true },
+  type: { type: String, enum: ["image", "video", "link"], required: true },
   url: { type: String, default: "" },               // cloudinary URL or link (optional for drafts)
   public_id: { type: String },                      // cloudinary public_id (if uploaded)
   caption: { type: String },

@@ -15,6 +15,8 @@ import uploadsRouter from "./routes/uploads.js";
 import inventoryRoutes from "./routes/inventoryRoutes.js";
 import couponRoutes from "./routes/couponRoutes.js";
 import offerRoutes from "./routes/offerRoutes.js";
+import attendanceRoutes from "./routes/attendanceRoutes.js";
+import paymentRoutes from "./routes/paymentRoutes.js";  
 
 dotenv.config();
 
@@ -74,6 +76,7 @@ app.use(cookieParser());
    STATIC FILES - SERVE UPLOADS
 ================================ */
 app.use("/uploads", express.static("uploads"));
+app.use("/api/payment", paymentRoutes); // Mount payment routes
 
 /* ===============================
    DB MIDDLEWARE — fixed for serverless
@@ -128,11 +131,13 @@ app.use("/api/bookings", bookingRoutes);
 app.use("/api/manageservices", manageServiceRoutes);
 app.use("/api/Manageservices", manageServiceRoutes); // legacy alias
 app.use("/api/stylists", stylistRoutes);
+app.use("/api/attendance", attendanceRoutes);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/uploads", uploadsRouter);
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api/coupons", couponRoutes);
 app.use("/api/offers", offerRoutes);
+app.use("/api/payment", paymentRoutes); // Mount payment routes
 
 /* ===============================
    404

@@ -12,6 +12,8 @@ import { bookingConfirmationHtml, cancellationNotificationHtml } from "../Utils/
 
 export const createBooking = async (req, res) => {
   try {
+    console.log("📝 CREATE BOOKING REQUEST RECEIVED");
+    console.log("📦 Full Request Body:", JSON.stringify(req.body, null, 2));
 
     const {
       selectedServices,
@@ -22,25 +24,48 @@ export const createBooking = async (req, res) => {
       time,
       mode,
       stylist,
-      couponCode
+      couponCode,
+      paymentVerified,
+      orderId
     } = req.body;
+
+    console.log("✅ Extracted fields:", {
+      selectedServices: selectedServices?.length || 0,
+      customerName,
+      phone,
+      email,
+      date,
+      time,
+      mode,
+      stylist,
+      couponCode,
+      paymentVerified,
+      orderId
+    });
 
     // simple validation to prevent Mongoose from throwing
     if (!selectedServices || selectedServices.length === 0) {
+      console.error("❌ No services provided");
       return res.status(400).json({ ok: false, message: "Select at least one service" });
     }
     if (!customerName || !phone || !date || !time) {
+      console.error("❌ Missing required fields. Provided:", { customerName, phone, date, time });
       return res.status(400).json({ ok: false, message: "Missing required booking fields" });
     }
 
-    // OTP CHECK
+    // OTP CHECK - Skip if payment is already verified online
     const otpDoc = await Otp.findOne({ to: email, verified: true });
 
     if (!otpDoc) {
-      return res.status(400).json({
-        ok:false,
-        message:"Email not verified"
-      });
+      // If payment was verified via payment gateway, allow booking even without fresh OTP
+      if (!(paymentVerified && mode === "online")) {
+        return res.status(400).json({
+          ok: false,
+          message: "Email not verified. Please verify your email first."
+        });
+      }
+      // Log for payment-verified bookings that bypass OTP check
+      console.log(`Payment-verified booking created for ${email} without OTP verification`);
     }
 
     const services = selectedServices.map(s => ({
@@ -131,8 +156,16 @@ export const createBooking = async (req, res) => {
       stylistId: stylist || null,
 
       mode: mode || "offline",
-      paymentStatus:"Pending",
       
+      // ✅ SET PAYMENT STATUS BASED ON PAYMENT VERIFICATION
+      paymentStatus: paymentVerified && orderId ? "Paid" : "Pending",
+      
+      // ✅ STORE PAYMENT ORDER ID IF PROVIDED
+      paymentOrderId: orderId || null,
+
+      // Auto-confirm bookings that already have a verified online payment
+      status: paymentVerified && orderId ? "Confirmed" : "Scheduled",
+
       // Coupon and discount fields
       couponCode: appliedCouponCode,
       discountPercentage,
@@ -143,8 +176,19 @@ export const createBooking = async (req, res) => {
       // reminderSent flag also handled by schema
     });
 
+    console.log("✅ BOOKING CREATED SUCCESSFULLY");
+    console.log("📊 Booking Details:", {
+      bookingId: booking._id,
+      customerName: booking.customerName,
+      paymentStatus: booking.paymentStatus,
+      mode: booking.mode,
+      paymentOrderId: booking.paymentOrderId,
+      servicesCount: booking.services.length,
+      finalAmount: booking.finalAmount
+    });
+
     // SEND CONFIRMATION EMAIL
-    try{
+    try {
 
       const html = bookingConfirmationHtml({
         customerName: booking.customerName,
@@ -159,27 +203,29 @@ export const createBooking = async (req, res) => {
 
       await sendEmail({
         to: booking.email,
-        subject:"Salon Booking Confirmation",
+        subject: "Salon Booking Confirmation",
         html
       });
 
-    }catch(err){
-      console.log("Email failed:",err);
+    } catch (err) {
+      console.log("Email failed:", err);
     }
 
     res.status(201).json({
-      ok:true,
+      ok: true,
       booking
     });
 
   }
-  catch(error){
+  catch (error) {
 
-    console.log("Create booking error:",error);
+    console.error("❌ CREATE BOOKING ERROR:", error);
+    console.error("Error Stack:", error.stack);
+    console.error("Error Message:", error.message);
 
     res.status(500).json({
-      ok:false,
-      message:"Booking creation failed"
+      ok: false,
+      message: error.message || "Booking creation failed"
     });
 
   }
@@ -191,19 +237,19 @@ export const createBooking = async (req, res) => {
    GET ALL BOOKINGS
 ====================================================== */
 
-export const getAllBookings = async (req,res)=>{
-  try{
+export const getAllBookings = async (req, res) => {
+  try {
 
     const bookings = await Booking.find()
-      .sort({createdAt:-1});
+      .sort({ createdAt: -1 });
 
     res.json(bookings);
 
   }
-  catch(error){
+  catch (error) {
 
     res.status(500).json({
-      message:"Failed to fetch bookings"
+      message: "Failed to fetch bookings"
     });
 
   }
@@ -215,24 +261,24 @@ export const getAllBookings = async (req,res)=>{
    DELETE BOOKING
 ====================================================== */
 
-export const deleteBooking = async (req,res)=>{
+export const deleteBooking = async (req, res) => {
 
-  try{
+  try {
 
-    const {id} = req.params;
+    const { id } = req.params;
 
     await Booking.findByIdAndDelete(id);
 
     res.json({
-      ok:true,
-      message:"Booking deleted"
+      ok: true,
+      message: "Booking deleted"
     });
 
   }
-  catch(error){
+  catch (error) {
 
     res.status(500).json({
-      message:"Delete failed"
+      message: "Delete failed"
     });
 
   }
@@ -245,28 +291,28 @@ export const deleteBooking = async (req,res)=>{
    UPDATE BOOKING
 ====================================================== */
 
-export const updateBooking = async (req,res)=>{
+export const updateBooking = async (req, res) => {
 
-  try{
+  try {
 
-    const {id} = req.params;
+    const { id } = req.params;
 
     const updated = await Booking.findByIdAndUpdate(
       id,
       req.body,
-      {new:true}
+      { new: true }
     );
 
     res.json({
-      ok:true,
-      booking:updated
+      ok: true,
+      booking: updated
     });
 
   }
-  catch(error){
+  catch (error) {
 
     res.status(500).json({
-      message:"Update failed"
+      message: "Update failed"
     });
 
   }
@@ -279,11 +325,11 @@ export const updateBooking = async (req,res)=>{
    CREATE CASHFREE PAYMENT
 ====================================================== */
 
-export const createPaymentOrder = async (req,res)=>{
+export const createPaymentOrder = async (req, res) => {
 
-  try{
+  try {
 
-    const {bookingId,amount} = req.body;
+    const { bookingId, amount } = req.body;
 
     if (!process.env.CASHFREE_APP_ID || !process.env.CASHFREE_SECRET_KEY) {
       return res.status(500).json({
@@ -293,9 +339,9 @@ export const createPaymentOrder = async (req,res)=>{
 
     const booking = await Booking.findById(bookingId);
 
-    if(!booking){
+    if (!booking) {
       return res.status(404).json({
-        message:"Booking not found"
+        message: "Booking not found"
       });
     }
 
@@ -306,28 +352,28 @@ export const createPaymentOrder = async (req,res)=>{
       "https://sandbox.cashfree.com/pg/orders",
 
       {
-        order_id:orderId,
-        order_amount:amount,
-        order_currency:"INR",
+        order_id: orderId,
+        order_amount: amount,
+        order_currency: "INR",
 
-        customer_details:{
-          customer_id:booking._id.toString(),
-          customer_email:booking.email,
-          customer_phone:booking.phone
+        customer_details: {
+          customer_id: booking._id.toString(),
+          customer_email: booking.email,
+          customer_phone: booking.phone
         },
 
-        order_meta:{
-          return_url:`http://localhost:3000/payment-success?order_id=${orderId}`
+        order_meta: {
+          return_url: `http://localhost:5173/booking-success`, // frontend route to handle post-payment landing 
         }
 
       },
 
       {
-        headers:{
-          "Content-Type":"application/json",
-          "x-api-version":"2022-09-01",
-          "x-client-id":process.env.CASHFREE_APP_ID,
-          "x-client-secret":process.env.CASHFREE_SECRET_KEY
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-version": "2022-09-01",
+          "x-client-id": process.env.CASHFREE_APP_ID,
+          "x-client-secret": process.env.CASHFREE_SECRET_KEY
         }
       }
 
@@ -339,16 +385,16 @@ export const createPaymentOrder = async (req,res)=>{
     await booking.save();
 
     res.json({
-      payment_link:response.data.payment_link
+      payment_link: response.data.payment_link
     });
 
   }
-  catch(error){
+  catch (error) {
 
-    console.log("Cashfree error:",error.response?.data || error.message);
+    console.log("Cashfree error:", error.response?.data || error.message);
 
     res.status(500).json({
-      message:"Payment creation failed"
+      message: "Payment creation failed"
     });
 
   }
@@ -361,26 +407,26 @@ export const createPaymentOrder = async (req,res)=>{
    VERIFY PAYMENT
 ====================================================== */
 
-export const verifyPayment = async (req,res)=>{
+export const verifyPayment = async (req, res) => {
 
-  try{
+  try {
 
-    const {orderId} = req.body;
+    const { orderId } = req.body;
 
     if (!process.env.CASHFREE_APP_ID || !process.env.CASHFREE_SECRET_KEY) {
       return res.status(500).json({
-        ok:false,
+        ok: false,
         message: "Cashfree payment gateway not configured. Set CASHFREE_APP_ID and CASHFREE_SECRET_KEY."
       });
     }
 
     const booking = await Booking.findOne({
-      paymentOrderId:orderId
+      paymentOrderId: orderId
     });
 
-    if(!booking){
+    if (!booking) {
       return res.status(404).json({
-        ok:false
+        ok: false
       });
     }
 
@@ -389,16 +435,16 @@ export const verifyPayment = async (req,res)=>{
       `https://sandbox.cashfree.com/pg/orders/${orderId}`,
 
       {
-        headers:{
-          "x-api-version":"2022-09-01",
-          "x-client-id":process.env.CASHFREE_APP_ID,
-          "x-client-secret":process.env.CASHFREE_SECRET_KEY
+        headers: {
+          "x-api-version": "2022-09-01",
+          "x-client-id": process.env.CASHFREE_APP_ID,
+          "x-client-secret": process.env.CASHFREE_SECRET_KEY
         }
       }
 
     );
 
-    if(response.data.order_status === "PAID"){
+    if (response.data.order_status === "PAID") {
 
       booking.paymentStatus = "Paid";
 
@@ -407,16 +453,16 @@ export const verifyPayment = async (req,res)=>{
     }
 
     res.json({
-      ok:true
+      ok: true
     });
 
   }
-  catch(error){
+  catch (error) {
 
-    console.log("Verify payment error:",error);
+    console.log("Verify payment error:", error);
 
     res.status(500).json({
-      ok:false
+      ok: false
     });
 
   }
