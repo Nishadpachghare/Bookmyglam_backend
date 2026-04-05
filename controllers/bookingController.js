@@ -4,6 +4,7 @@ import Coupon from "../models/coupon.js";
 import axios from "axios";
 import { sendEmail } from "../Utils/emailSender.js";
 import { bookingConfirmationHtml, cancellationNotificationHtml } from "../Utils/emailTemplates.js";
+import { resolveDiscount } from "../Utils/discountUtils.js";
 
 
 /* ======================================================
@@ -84,8 +85,36 @@ export const createBooking = async (req, res) => {
     let finalAmount = totalAmount;
     let appliedCouponCode = null;
 
-    // Validate and apply coupon if provided
     if (couponCode && couponCode.trim()) {
+      try {
+        const result = await resolveDiscount({
+          code: couponCode,
+          totalAmount,
+          selectedServices: services,
+        });
+
+        if (!result.success) {
+          return res.status(400).json({
+            ok: false,
+            message: result.message
+          });
+        }
+
+        discountPercentage = result.data.discount;
+        discountAmount = result.data.discountAmount;
+        finalAmount = result.data.finalAmount;
+        appliedCouponCode = result.data.code;
+      } catch (error) {
+        console.error("Discount validation error:", error);
+        return res.status(400).json({
+          ok: false,
+          message: "Error validating coupon or offer"
+        });
+      }
+    }
+
+    // Validate and apply coupon if provided
+    if (false && couponCode && couponCode.trim()) {
       try {
         const coupon = await Coupon.findOne({ code: couponCode.toUpperCase() });
 

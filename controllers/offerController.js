@@ -100,10 +100,23 @@ export const getActiveOffers = async (req, res) => {
     if (!checkDb(req, res)) return;
     const now = new Date();
     const offers = await Offer.find({
+      active: true,
       published: true,
-      $or: [
-        { startDate: { $lte: now }, endDate: { $gte: now } },
-        { startDate: null, endDate: null },
+      $and: [
+        {
+          $or: [
+            { startDate: null },
+            { startDate: { $exists: false } },
+            { startDate: { $lte: now } },
+          ],
+        },
+        {
+          $or: [
+            { endDate: null },
+            { endDate: { $exists: false } },
+            { endDate: { $gte: now } },
+          ],
+        },
       ],
     }).sort({ createdAt: -1 });
     res.json({ success: true, data: offers });

@@ -1,5 +1,6 @@
 import Coupon from "../models/coupon.js";
 import Offer from "../models/offer.js";
+import { resolveDiscount } from "../Utils/discountUtils.js";
 
 // CREATE COUPON
 export const createCoupon = async (req, res) => {
@@ -209,6 +210,20 @@ export const toggleCouponActive = async (req, res) => {
 export const validateDiscount = async (req, res) => {
   try {
     const { code, totalAmount, selectedServices } = req.body;
+    const result = await resolveDiscount({
+      code,
+      totalAmount,
+      selectedServices,
+    });
+
+    if (!result.success) {
+      return res.status(result.status).json({
+        success: false,
+        message: result.message,
+      });
+    }
+
+    return res.status(200).json(result);
 
     if (!code) {
       return res.status(400).json({
