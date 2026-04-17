@@ -44,7 +44,10 @@ app.use((req, res, next) => {
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
+  "http://localhost:5000",
+  "https://bookmyglam.vercel.app",
   "https://book-my-glam-web.vercel.app",
+  "https://www.bookmyglam.vercel.app",
 ];
 
 app.use(
@@ -55,13 +58,14 @@ app.use(
       if (localhostRegex.test(origin) || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
+      console.warn(`❌ CORS rejected origin: ${origin}`);
       return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
     exposedHeaders: ["Set-Cookie"],
-    optionsSuccessStatus: 204,
+    optionsSuccessStatus: 200,
   })
 );
 
