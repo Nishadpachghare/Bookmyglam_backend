@@ -61,12 +61,19 @@ export const createOffer = async (req, res) => {
       return res.status(400).json({ success: false, error: "Title and discount are required" });
     }
 
+    // ✅ Validate discount is between 0 and 100
+    const discountValue = Number(discount) || 0;
+    if (discountValue < 0 || discountValue > 100) {
+      if (req.file) await deleteFromCloudinary(req.file.path || req.file.secure_url);
+      return res.status(400).json({ success: false, error: "Discount must be between 0 and 100" });
+    }
+
     const imageUrl = req.file?.path || req.file?.secure_url || req.file?.url || "";
 
     const offer = await Offer.create({
       title:       title.trim(),
       description: description?.trim() || "",
-      discount:    Number(discount) || 0,
+      discount:    discountValue,
       startDate:   startDate ? new Date(startDate) : null,
       endDate:     endDate   ? new Date(endDate)   : null,
       services:    parseServices(services),
@@ -142,7 +149,15 @@ export const updateOffer = async (req, res) => {
 
     if (body.title !== undefined)        updateData.title        = body.title.trim();
     if (body.description !== undefined)  updateData.description  = body.description.trim();
-    if (body.discount !== undefined)     updateData.discount     = Number(body.discount);
+    if (body.discount !== undefined) {
+      // ✅ Validate discount is between 0 and 100
+      const discountValue = Number(body.discount);
+      if (discountValue < 0 || discountValue > 100) {
+        if (req.file) await deleteFromCloudinary(req.file.path || req.file.secure_url);
+        return res.status(400).json({ success: false, error: "Discount must be between 0 and 100" });
+      }
+      updateData.discount = discountValue;
+    }
     if (body.startDate !== undefined)    updateData.startDate    = body.startDate ? new Date(body.startDate) : null;
     if (body.endDate !== undefined)      updateData.endDate      = body.endDate   ? new Date(body.endDate)   : null;
     if (body.services !== undefined)     updateData.services     = parseServices(body.services);

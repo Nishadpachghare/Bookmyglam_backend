@@ -9,18 +9,41 @@ const escapeRegExp = (value) =>
 
 const calculateDiscountData = (
   discountBaseAmount,
-  discount,
+  discountPercentage,
   totalAmount = discountBaseAmount,
 ) => {
-  const discountAmount = Math.round(
-    (Number(discountBaseAmount || 0) * discount) / 100,
-  );
-  const finalAmount = Math.round(Number(totalAmount || 0) - discountAmount);
+  // ✅ Strict type coercion and validation
+  const base = parseInt(discountBaseAmount) || 0;
+  const percent = Math.max(0, Math.min(parseInt(discountPercentage) || 0, 100));
+  const total = parseInt(totalAmount) || 0;
+  
+  // ✅ CRITICAL: If totalAmount provided and different from base,
+  // it means base is applicable amount and total includes non-applicable services
+  // In this case:
+  // - discountAmount is calculated only on the applicable amount (base)
+  // - finalAmount = total - discountAmount (includes all services minus discount)
+  
+  const discountAmount = Math.round((base * percent) / 100);
+  
+  // ✅ RULE: finalAmount always = total amount - discount amount
+  // NOT = base - discount (which would exclude non-applicable services)
+  const finalAmount = total - discountAmount;
+
+  console.log(`💰 DISCOUNT CALCULATION:
+    Base (Applicable Amount): ₹${base}
+    Percent: ${percent}%
+    Total (All Services): ₹${total}
+    Discount (on applicable only): ₹${discountAmount}
+    Final Price (all services - discount): ₹${finalAmount}`);
+
+  if (total !== base) {
+    console.log(`    Note: Discount applied to ₹${base} of ₹${total} total`);
+  }
 
   return {
-    discount,
-    discountAmount,
-    finalAmount,
+    discount: percent,
+    discountAmount: Math.max(0, discountAmount),
+    finalAmount: Math.max(0, finalAmount),
   };
 };
 
@@ -67,16 +90,7 @@ export const resolveDiscount = async ({
   const coupon = await Coupon.findOne({ code: trimmedCode.toUpperCase() });
 
   if (coupon) {
-    console.log("✅ Found coupon:", coupon.code);
-    console.log("   Active:", coupon.active);
-    console.log("   Discount:", coupon.discount);
-    console.log("   Min Amount:", coupon.minAmount);
-    console.log("   Valid From:", coupon.validFrom);
-    console.log("   Valid Till:", coupon.validTill);
-    console.log("   Expiry Date:", coupon.expiryDate);
-    
     if (!coupon.active) {
-      console.log("❌ Coupon is NOT active");
       return {
         success: false,
         status: 400,
@@ -85,7 +99,6 @@ export const resolveDiscount = async ({
     }
 
     if (coupon.expiryDate && new Date() > new Date(coupon.expiryDate)) {
-      console.log("❌ Coupon expired (expiryDate)");
       return {
         success: false,
         status: 400,
@@ -94,7 +107,6 @@ export const resolveDiscount = async ({
     }
 
     if (coupon.validFrom && new Date() < new Date(coupon.validFrom)) {
-      console.log("❌ Coupon not yet valid (validFrom)");
       return {
         success: false,
         status: 400,
@@ -103,7 +115,6 @@ export const resolveDiscount = async ({
     }
 
     if (coupon.validTill && new Date() > new Date(coupon.validTill)) {
-      console.log("❌ Coupon expired (validTill)");
       return {
         success: false,
         status: 400,
@@ -112,7 +123,6 @@ export const resolveDiscount = async ({
     }
 
     if (coupon.minAmount && Number(totalAmount) < coupon.minAmount) {
-      console.log(`❌ Amount ${totalAmount} is less than minimum ${coupon.minAmount}`);
       return {
         success: false,
         status: 400,
@@ -120,14 +130,36 @@ export const resolveDiscount = async ({
       };
     }
 
-    console.log(`✅ Coupon validation PASSED! Applying ${coupon.discount}% discount`);
+    // ✅ Check service criteria for coupons (if specified)
+    const couponServices = (coupon.services || [])
+      .map((service) => normalizeLower(service))
+      .filter(Boolean);
+
+    if (couponServices.length > 0) {
+      const normalizedSelectedServices = (selectedServices || [])
+        .map((service) => normalizeSelectedService(service))
+        .filter((service) => service.name);
+
+      const hasApplicableService = normalizedSelectedServices.some((service) =>
+        couponServices.includes(service.name),
+      );
+
+      if (!hasApplicableService) {
+        return {
+          success: false,
+          status: 400,
+          message: `Coupon "${coupon.code}" is only applicable for: ${coupon.services.join(", ")}`,
+        };
+      }
+    }
+
     return {
       success: true,
       type: "coupon",
       message: "Coupon is valid",
       data: {
-      code: coupon.code,
-      description: coupon.description,
+        code: coupon.code,
+        description: coupon.description,
         ...calculateDiscountData(totalAmount, coupon.discount, totalAmount),
       },
     };
@@ -141,39 +173,25 @@ export const resolveDiscount = async ({
   });
 
   if (!offer) {
-    console.log("❌ Exact offer match not found. Searching for similar matches...");
-    
-    // Get all active coupons and offers for suggestion
-    const activeCoupons = await Coupon.find({ active: true });
-    const allCoupons = await Coupon.find({});
-    
-    console.log(`📊 ALL COUPONS IN DATABASE: ${allCoupons.length}`);
-    allCoupons.forEach((c, idx) => {
-      console.log(`     [${idx + 1}] Code: ${c.code} | Active: ${c.active} | Discount: ${c.discount}% | Min: ₹${c.minAmount}`);
-    });
-    
-    console.log(`📊 ACTIVE COUPONS: ${activeCoupons.length}`);
-    activeCoupons.forEach((c, idx) => {
-      console.log(`     [${idx + 1}] ${c.code} - ${c.discount}% off`);
-    });
-    
-    const activeOffers = await Offer.find({ active: true, published: true });
-    console.log(`📊 Available active offers: ${activeOffers.length}`);
-    
-    // Find partial matches
+    // Optimized search: only query once with both filters
+    const [activeCoupons, activeOffers] = await Promise.all([
+      Coupon.find({ active: true }).select("code discount minAmount services").lean(),
+      Offer.find({ active: true, published: true }).select("title discount services").lean(),
+    ]);
+
     const searchLower = trimmedCode.toLowerCase();
-    const matchingCoupons = activeCoupons.filter(c => c.code.toLowerCase().includes(searchLower));
-    const matchingOffers = activeOffers.filter(o => o.title.toLowerCase().includes(searchLower));
-    
+    const matchingCoupons = activeCoupons.filter(c => c.code.toLowerCase().includes(searchLower)).slice(0, 3);
+    const matchingOffers = activeOffers.filter(o => o.title.toLowerCase().includes(searchLower)).slice(0, 3);
+
     if (matchingCoupons.length > 0 || matchingOffers.length > 0) {
       const suggestions = [];
       matchingCoupons.forEach(c => {
-        suggestions.push(`"${c.code}" (Coupon - ${c.discount}% off)`);
+        suggestions.push(`"${c.code}" (${c.discount}% off)`);
       });
       matchingOffers.forEach(o => {
-        suggestions.push(`"${o.title}" (Offer - ${o.discount}% off)`);
+        suggestions.push(`"${o.title}" (${o.discount}% off)`);
       });
-      
+
       return {
         success: false,
         status: 404,
@@ -184,14 +202,11 @@ export const resolveDiscount = async ({
     return {
       success: false,
       status: 404,
-      message: `Invalid coupon code or offer "${trimmedCode}". Please select from available offers or coupons.`,
+      message: `Invalid coupon or offer. Check available options.`,
     };
   }
 
-  console.log("✅ Found offer:", offer.title);
-
   if (!offer.active || !offer.published) {
-    console.log(`❌ Offer not active (active: ${offer.active}, published: ${offer.published})`);
     return {
       success: false,
       status: 400,
@@ -226,37 +241,34 @@ export const resolveDiscount = async ({
     normalizedOfferServices.includes(service.name),
   );
 
-  // ✅ DEBUG LOGGING: Service Matching
-  console.log("🔍 OFFER VALIDATION - Service Matching Debug:");
-  console.log("  Offer services (raw):", offer.services);
-  console.log("  Offer services (normalized):", normalizedOfferServices);
-  console.log("  Selected services (raw):", selectedServices?.map(s => s.serviceName || s.service || s.name));
-  console.log("  Selected services (normalized):", normalizedSelectedServices);
-  console.log("  Applicable services:", applicableServices);
-
-  // ✅ FIX: Offers MUST have services configured and match at least one selected service
   if (normalizedOfferServices.length === 0) {
-    console.error("❌ Offer has NO services configured");
     return {
       success: false,
       status: 400,
-      message: "This offer is not properly configured. Please contact support.",
+      message: "This offer is not properly configured.",
     };
   }
 
   if (applicableServices.length === 0) {
-    console.error(`❌ No selected services match offer services. Offer: ${normalizedOfferServices.join(", ")}, Selected: ${normalizedSelectedServices.map(s => s.name).join(", ")}`);
     return {
       success: false,
       status: 400,
-      message: `Offer "${offer.title}" is only applicable for: ${offer.services.join(", ")}`,
+      message: `Offer only applicable for: ${offer.services.join(", ")}`,
     };
   }
 
-  console.log(`✅ Offer validation passed! ${applicableServices.length} service(s) match`);
-
-  // ✅ Apply discount only on applicable services
   const applicableAmount = applicableServices.reduce((sum, service) => sum + service.price, 0);
+
+  console.log(`
+  ═════════════════════════════════════════
+  🎁 OFFER CALCULATION:
+    Offer Services: ${offer.services.join(", ")}
+    Selected Services: ${normalizedSelectedServices.map(s => `${s.displayName} ₹${s.price}`).join(", ")}
+    Applicable Services: ${applicableServices.map(s => `${s.displayName} ₹${s.price}`).join(", ")}
+    Applicable Amount: ₹${applicableAmount}
+    Total Booking Amount: ₹${totalAmount}
+  ═════════════════════════════════════════
+  `);
 
   return {
     success: true,

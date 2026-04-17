@@ -9,6 +9,9 @@ import {
   getAllAttendance,
   updateStylistShift,
   getStylistSchedule,
+  getStylistsNotCheckedIn,
+  triggerAutomaticAbsent,
+  getStylistAttendanceDebug,
 } from "../controllers/attendanceController.js";
 
 const router = express.Router();
@@ -25,14 +28,23 @@ router.get("/monthly", getStylistMonthlyAttendance);
 // Get stylist analytics (last 30 days)
 router.get("/analytics", getStylistAnalytics);
 
+// ✅ NEW: Debug endpoint to see raw attendance records
+router.get("/debug/attendance", getStylistAttendanceDebug);
+
 // Get all attendance with filters
 router.get("/", getAllAttendance);
+
+// ✅ Get stylists who haven't checked in today (before 5 PM)
+router.get("/not-checked-in", getStylistsNotCheckedIn);
 
 // Add holiday
 router.post("/holiday", addHoliday);
 
 // Add half day
 router.post("/half-day", addHalfDay);
+
+// ✅ Manually trigger automatic absent marking (Admin only)
+router.post("/trigger-absent", triggerAutomaticAbsent);
 
 // Update stylist shift timings
 router.put("/shift/:stylistId", updateStylistShift);

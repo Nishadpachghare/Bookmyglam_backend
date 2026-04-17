@@ -136,10 +136,25 @@ export const getStylistAnalytics = async (req, res) => {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const startDate = thirtyDaysAgo.toISOString().split("T")[0];
 
+    console.log(`\n📊 ANALYTICS QUERY:`);
+    console.log(`   Stylist ID: ${stylistId}`);
+    console.log(`   Date Range: ${startDate} to today`);
+
     const attendance = await Attendance.find({
       stylistId,
       date: { $gte: startDate },
     }).sort({ date: 1 });
+
+    console.log(`\n📋 ATTENDANCE RECORDS FOUND: ${attendance.length}`);
+    if (attendance.length > 0) {
+      console.log(`   Records:`, attendance.map(a => ({ 
+        date: a.date, 
+        status: a.status,
+        checkIn: a.checkInTime ? "✅ Yes" : "❌ No",
+        customers: a.customersHandled,
+        revenue: a.totalRevenue
+      })));
+    }
 
     const bookings = await Booking.find({
       stylistId,
@@ -156,31 +171,82 @@ export const getStylistAnalytics = async (req, res) => {
     }));
 
     // Stats
+    const presentCount = attendance.filter(
+      (a) => a.status === "full" || a.status === "half"
+    ).length;
+    const absentCount = attendance.filter(
+      (a) => a.status === "absent"
+    ).length;
+
+    console.log(`\n📊 BREAKDOWN:`);
+    console.log(`   ✅ Present (full/half): ${presentCount}`);
+    console.log(`   ❌ Absent: ${absentCount}`);
+    console.log(`   📅 Total Days: ${attendance.length}`);
+
     const stats = {
-      totalCustomers: attendance.reduce((sum, a) => sum + a.customersHandled, 0),
-      totalRevenue: attendance.reduce((sum, a) => sum + a.totalRevenue, 0),
+      totalCustomers: attendance.reduce((sum, a) => sum + (a.customersHandled || 0), 0),
+      totalRevenue: attendance.reduce((sum, a) => sum + (a.totalRevenue || 0), 0),
       averageCustomersPerDay:
         attendance.length > 0
-          ? attendance.reduce((sum, a) => sum + a.customersHandled, 0) /
+          ? attendance.reduce((sum, a) => sum + (a.customersHandled || 0), 0) /
           attendance.length
           : 0,
-      presentDays: attendance.filter(
-        (a) => a.status === "full" || a.status === "half"
-      ).length,
+      totalDays: attendance.length,
+      presentDays: presentCount,
+      absenceDays: absentCount,
       attendancePercentage:
         attendance.length > 0
-          ? (attendance.filter(
-            (a) => a.status === "full" || a.status === "half"
-          ).length /
-            attendance.length) *
-          100
+          ? Math.round((presentCount / attendance.length) * 100)
           : 0,
     };
 
+    console.log(`\n📤 SENDING STATS:`, stats);
+    console.log(`\n`); // Extra line for readability
+
     res.json({ success: true, chartData, stats });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Error in getStylistAnalytics:", err);
     res.status(500).json({ error: "Failed to fetch analytics" });
+  }
+};
+
+// ✅ NEW: Debug endpoint to see raw attendance data
+export const getStylistAttendanceDebug = async (req, res) => {
+  try {
+    const { stylistId } = req.query;
+
+    if (!stylistId) {
+      return res.status(400).json({ error: "stylistId is required" });
+    }
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const startDate = thirtyDaysAgo.toISOString().split("T")[0];
+
+    const attendance = await Attendance.find({
+      stylistId,
+      date: { $gte: startDate },
+    }).sort({ date: 1 }).populate("stylistId", "name");
+
+    res.json({
+      success: true,
+      queryParams: { stylistId, startDate },
+      recordsCount: attendance.length,
+      records: attendance.map(a => ({
+        _id: a._id,
+        date: a.date,
+        status: a.status,
+        checkInTime: a.checkInTime,
+        checkoutTime: a.checkoutTime,
+        customersHandled: a.customersHandled,
+        totalRevenue: a.totalRevenue,
+        hoursWorked: a.hoursWorked,
+        notes: a.notes
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch debug data" });
   }
 };
 
@@ -317,9 +383,18 @@ export const getStylistSchedule = async (req, res) => {
 
     const stylist = await Stylist.findById(stylistId);
 
+    console.log(`\n📅 SCHEDULE QUERY:`);
+    console.log(`   Stylist ID: ${stylistId}`);
+
     if (!stylist) {
+      console.log(`   ❌ Stylist not found`);
       return res.status(404).json({ error: "Stylist not found" });
     }
+
+    console.log(`   ✅ Stylist found: ${stylist.name}`);
+    console.log(`   Shift: ${stylist.shiftStartTime} - ${stylist.shiftEndTime}`);
+    console.log(`   Holidays: ${stylist.holidays?.length ?? 0}`, stylist.holidays);
+    console.log(`   Half Days: ${stylist.halfDays?.length ?? 0}`, stylist.halfDays);
 
     res.json({
       success: true,
@@ -330,12 +405,64 @@ export const getStylistSchedule = async (req, res) => {
         role: stylist.role,
         shiftStartTime: stylist.shiftStartTime,
         shiftEndTime: stylist.shiftEndTime,
-        holidays: stylist.holidays,
-        halfDays: stylist.halfDays,
+        holidays: stylist.holidays || [],
+        halfDays: stylist.halfDays || [],
       },
     });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Error in getStylistSchedule:", err);
     res.status(500).json({ error: "Failed to fetch stylist schedule" });
+  }
+};
+
+// ✅ Get stylists who haven't checked in today (before 5:00 PM)
+export const getStylistsNotCheckedIn = async (req, res) => {
+  try {
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
+
+    // Get all active stylists
+    const allStylists = await Stylist.find({ isActive: true }).select("_id name email role");
+
+    // Get attendance records for today
+    const todayAttendance = await Attendance.find({ date: today }).select("stylistId checkInTime status");
+
+    // Find stylists who haven't checked in
+    const notCheckedIn = allStylists.filter((stylist) => {
+      const attendance = todayAttendance.find((a) => a.stylistId.toString() === stylist._id.toString());
+      return !attendance || !attendance.checkInTime; // No record or no check-in time
+    });
+
+    res.json({
+      success: true,
+      date: today,
+      totalStylists: allStylists.length,
+      checkedInCount: allStylists.length - notCheckedIn.length,
+      notCheckedInCount: notCheckedIn.length,
+      notCheckedIn: notCheckedIn.map((s) => ({
+        _id: s._id,
+        name: s.name,
+        email: s.email,
+        role: s.role,
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch stylists not checked in" });
+  }
+};
+
+// ✅ Manually trigger automatic absent marking (Admin endpoint)
+export const triggerAutomaticAbsent = async (req, res) => {
+  try {
+    const { triggerAbsentMarkingNow } = await import("../scheduler/automaticAbsentScheduler.js");
+    await triggerAbsentMarkingNow();
+
+    res.json({
+      success: true,
+      message: "Automatic absent marking triggered successfully",
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to trigger automatic absent marking" });
   }
 };

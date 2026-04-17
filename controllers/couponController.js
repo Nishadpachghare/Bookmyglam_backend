@@ -5,9 +5,8 @@ import { resolveDiscount } from "../Utils/discountUtils.js";
 // CREATE COUPON
 export const createCoupon = async (req, res) => {
   try {
-    const { code, discount } = req.body;
+    const { code, discount, services } = req.body;
 
-    // Strict validation check
     if (!code || discount === undefined) {
       return res.status(400).json({
         success: false,
@@ -15,7 +14,27 @@ export const createCoupon = async (req, res) => {
       });
     }
 
-    const coupon = await Coupon.create(req.body);
+    const discountValue = Number(discount);
+    if (discountValue < 0 || discountValue > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Discount must be between 0 and 100",
+      });
+    }
+
+    const couponData = {
+      code: code.toUpperCase().trim(),
+      discount: discountValue,
+      description: req.body.description || "",
+      minAmount: Number(req.body.minAmount) || 0,
+      services: Array.isArray(services) ? services.filter(s => s?.trim()) : [],
+      validFrom: req.body.validFrom || null,
+      validTill: req.body.validTill || null,
+      expiryDate: req.body.expiryDate || null,
+      active: req.body.active !== false,
+    };
+
+    const coupon = await Coupon.create(couponData);
 
     res.status(201).json({
       success: true,
@@ -23,14 +42,12 @@ export const createCoupon = async (req, res) => {
       data: coupon,
     });
   } catch (error) {
-    console.error("Database Save Error:", error);
+    console.error("Coupon creation error:", error.message);
 
-    // Handle unique constraint violation
     if (error.code === 11000) {
       return res.status(409).json({
         success: false,
         message: "Coupon code already exists",
-        error: error.message,
       });
     }
 
@@ -45,7 +62,9 @@ export const createCoupon = async (req, res) => {
 // GET ALL COUPONS
 export const getCoupons = async (req, res) => {
   try {
-    const coupons = await Coupon.find().sort({ createdAt: -1 });
+    const coupons = await Coupon.find()
+      .sort({ createdAt: -1 })
+      .lean();
     res.status(200).json({ success: true, data: coupons });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -55,9 +74,33 @@ export const getCoupons = async (req, res) => {
 // UPDATE COUPON
 export const updateCoupon = async (req, res) => {
   try {
+    const updateData = {};
+
+    if (req.body.discount !== undefined) {
+      const discountValue = Number(req.body.discount);
+      if (discountValue < 0 || discountValue > 100) {
+        return res.status(400).json({
+          success: false,
+          message: "Discount must be between 0 and 100",
+        });
+      }
+      updateData.discount = discountValue;
+    }
+
+    if (req.body.code !== undefined) updateData.code = req.body.code.toUpperCase().trim();
+    if (req.body.description !== undefined) updateData.description = req.body.description;
+    if (req.body.minAmount !== undefined) updateData.minAmount = Number(req.body.minAmount);
+    if (req.body.services !== undefined) {
+      updateData.services = Array.isArray(req.body.services) ? req.body.services.filter(s => s?.trim()) : [];
+    }
+    if (req.body.validFrom !== undefined) updateData.validFrom = req.body.validFrom || null;
+    if (req.body.validTill !== undefined) updateData.validTill = req.body.validTill || null;
+    if (req.body.expiryDate !== undefined) updateData.expiryDate = req.body.expiryDate || null;
+    if (req.body.active !== undefined) updateData.active = req.body.active !== false;
+
     const updatedCoupon = await Coupon.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updateData,
       { new: true, runValidators: true }
     );
 
@@ -150,18 +193,19 @@ export const validateCoupon = async (req, res) => {
       });
     }
 
-    // Calculate discount amount
-    const discountAmount = (totalAmount * coupon.discount) / 100;
-    const finalAmount = totalAmount - discountAmount;
+    // Calculate discount amount - FIX: Ensure correct percentage calculation
+    const discountPercentage = Math.min(Number(coupon.discount || 0), 100); // Cap at 100%
+    const discountAmount = Math.round((totalAmount * discountPercentage) / 100);
+    const finalAmount = Math.round(totalAmount - discountAmount);
 
     res.status(200).json({
       success: true,
       message: "Coupon is valid",
       data: {
         code: coupon.code,
-        discount: coupon.discount,
-        discountAmount: Math.round(discountAmount),
-        finalAmount: Math.round(finalAmount),
+        discount: discountPercentage,
+        discountAmount,
+        finalAmount,
         description: coupon.description,
       },
     });
@@ -210,11 +254,20 @@ export const toggleCouponActive = async (req, res) => {
 export const validateDiscount = async (req, res) => {
   try {
     const { code, totalAmount, selectedServices } = req.body;
+    console.log("📋 validateDiscount called with:", {
+      code,
+      totalAmount,
+      selectedServicesCount: selectedServices?.length,
+      selectedServices: selectedServices?.map(s => s.serviceName),
+    });
+
     const result = await resolveDiscount({
       code,
       totalAmount,
       selectedServices,
     });
+
+    console.log("✅ resolveDiscount result:", result);
 
     if (!result.success) {
       return res.status(result.status).json({
@@ -223,138 +276,26 @@ export const validateDiscount = async (req, res) => {
       });
     }
 
-    return res.status(200).json(result);
+    // ✅ ENSURE CORRECT RESPONSE STRUCTURE
+    const responseData = {
+      success: true,
+      type: result.type,
+      message: result.message,
+      data: {
+        code: result.data.code,
+        discount: result.data.discount,
+        discountAmount: result.data.discountAmount,
+        finalAmount: result.data.finalAmount,
+        applicableAmount: result.data.applicableAmount,
+        appliedServices: result.data.appliedServices,
+        description: result.data.description,
+      },
+    };
 
-    if (!code) {
-      return res.status(400).json({
-        success: false,
-        message: "Code or Offer is required",
-      });
-    }
-
-    // Try to validate as coupon first
-    const coupon = await Coupon.findOne({ code: code.toUpperCase() });
-    
-    if (coupon) {
-      // COUPON VALIDATION
-      if (!coupon.active) {
-        return res.status(400).json({
-          success: false,
-          message: "Coupon code is not active",
-        });
-      }
-
-      if (coupon.expiryDate && new Date() > new Date(coupon.expiryDate)) {
-        return res.status(400).json({
-          success: false,
-          message: "Coupon code has expired",
-        });
-      }
-
-      if (coupon.validFrom && new Date() < new Date(coupon.validFrom)) {
-        return res.status(400).json({
-          success: false,
-          message: "Coupon is not yet valid",
-        });
-      }
-
-      if (coupon.validTill && new Date() > new Date(coupon.validTill)) {
-        return res.status(400).json({
-          success: false,
-          message: "Coupon code has expired",
-        });
-      }
-
-      if (coupon.minAmount && totalAmount < coupon.minAmount) {
-        return res.status(400).json({
-          success: false,
-          message: `Minimum booking amount of ₹${coupon.minAmount} required for this coupon`,
-        });
-      }
-
-      const discountAmount = (totalAmount * coupon.discount) / 100;
-      const finalAmount = totalAmount - discountAmount;
-
-      return res.status(200).json({
-        success: true,
-        type: "coupon",
-        message: "Coupon is valid",
-        data: {
-          code: coupon.code,
-          discount: coupon.discount,
-          discountAmount: Math.round(discountAmount),
-          finalAmount: Math.round(finalAmount),
-          description: coupon.description,
-        },
-      });
-    }
-
-    // Try to validate as offer
-    const offer = await Offer.findOne({ title: code });
-    
-    if (offer) {
-      // OFFER VALIDATION
-      if (!offer.active || !offer.published) {
-        return res.status(400).json({
-          success: false,
-          message: "Offer is not available",
-        });
-      }
-
-      const now = new Date();
-      if (offer.startDate && new Date(offer.startDate) > now) {
-        return res.status(400).json({
-          success: false,
-          message: "Offer has not started yet",
-        });
-      }
-
-      if (offer.endDate && new Date(offer.endDate) < now) {
-        return res.status(400).json({
-          success: false,
-          message: "Offer has ended",
-        });
-      }
-
-      // Check if offer applies to selected services
-      if (offer.services && offer.services.length > 0 && selectedServices && selectedServices.length > 0) {
-        const hasApplicableService = selectedServices.some(service =>
-          offer.services.some(offerService => 
-            offerService.toLowerCase() === service.toLowerCase()
-          )
-        );
-
-        if (!hasApplicableService) {
-          return res.status(400).json({
-            success: false,
-            message: `Offer is only applicable for: ${offer.services.join(", ")}`,
-          });
-        }
-      }
-
-      const discountAmount = (totalAmount * offer.discount) / 100;
-      const finalAmount = totalAmount - discountAmount;
-
-      return res.status(200).json({
-        success: true,
-        type: "offer",
-        message: "Offer is valid",
-        data: {
-          code: offer.title,
-          discount: offer.discount,
-          discountAmount: Math.round(discountAmount),
-          finalAmount: Math.round(finalAmount),
-          description: offer.description,
-        },
-      });
-    }
-
-    // Neither coupon nor offer found
-    return res.status(404).json({
-      success: false,
-      message: "Invalid coupon code or offer",
-    });
+    console.log("📤 Sending response:", responseData);
+    return res.status(200).json(responseData);
   } catch (error) {
+    console.error("❌ Error in validateDiscount:", error);
     res.status(500).json({
       success: false,
       message: "Error validating discount",

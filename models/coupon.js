@@ -7,24 +7,33 @@ const couponSchema = new mongoose.Schema(
       required: true,
       unique: true,
       trim: true,
-      uppercase: true, // Automatically converts 'save50' to 'SAVE50'
+      uppercase: true,
     },
     discount: {
       type: Number,
       required: true,
+      min: 0,
+      max: 100,
     },
     minAmount: {
       type: Number,
-      default: 0, // Minimum booking amount required to use coupon
+      default: 0,
+    },
+    services: {
+      type: [String],
+      default: [],
     },
     validFrom: {
       type: Date,
+      default: null,
     },
     validTill: {
       type: Date,
+      default: null,
     },
     expiryDate: {
       type: Date,
+      default: null,
     },
     description: {
       type: String,
@@ -32,11 +41,15 @@ const couponSchema = new mongoose.Schema(
     },
     active: {
       type: Boolean,
-      default: true, // Coupons are active by default
+      default: true,
     },
   },
   { timestamps: true }
 );
+
+// Performance indexes
+couponSchema.index({ code: 1, active: 1 });
+couponSchema.index({ active: 1, expiryDate: 1 });
 
 const Coupon = mongoose.model("Coupon", couponSchema);
 

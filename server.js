@@ -174,9 +174,14 @@ async function start() {
     console.log(`🚀 Server running on port ${PORT}`);
     try {
       const { startReminderScheduler } = await import("./scheduler/reminderScheduler.js");
+      const { startAutomaticAbsentScheduler } = await import("./scheduler/automaticAbsentScheduler.js");
+      
       startReminderScheduler();
+      startAutomaticAbsentScheduler();
+      
+      console.log("✅ All schedulers started successfully");
     } catch (err) {
-      console.warn("Scheduler not started:", err.message);
+      console.warn("⚠️  Scheduler not started:", err.message);
     }
   });
 }
