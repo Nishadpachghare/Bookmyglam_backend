@@ -44,10 +44,8 @@ app.use((req, res, next) => {
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
-  "http://localhost:5000",
+  "https://bookmyglam-backend.vercel.app",
   "https://bookmyglam.vercel.app",
-  "https://book-my-glam-web.vercel.app",
-  "https://www.bookmyglam.vercel.app",
 ];
 
 app.use(

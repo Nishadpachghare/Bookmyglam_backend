@@ -38,7 +38,7 @@ const uploadSingle = (req, res, next) => {
 };
 
 // ── DEBUG route — test in browser ─────────────────────────────────────────────
-// GET http://localhost:5000/api/offers/debug-test
+// GET https://bookmyglam-backend.vercel.app/api/offers/debug-test
 router.get("/debug-test", (req, res) => {
   res.json({
     message: "Debug route working",

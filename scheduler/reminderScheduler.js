@@ -31,7 +31,7 @@ export function startReminderScheduler() {
         const diff = dt.diff(now, "minute");
         if (diff >= 55 && diff <= 65) {
           // build links (assume frontend/backend host same origin)
-          const base = process.env.BASE_URL || "http://localhost:5000";
+          const base = process.env.BASE_URL || "https://bookmyglam-backend.vercel.app";
           const confirmLink = `${base}/api/bookings/${b._id}/confirm`;
           const cancelLink = `${base}/api/bookings/${b._id}/cancel`;
 
