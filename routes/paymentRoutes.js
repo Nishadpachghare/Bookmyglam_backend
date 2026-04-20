@@ -63,7 +63,7 @@ router.post("/create-order", async (req, res) => {
       return res.status(500).json({ error: "Server configuration error: return URL not available" });
     }
 
-    const returnUrl = `${returnBaseUrl}/booking`;
+    const returnUrl = `${returnBaseUrl}/booking?order_id={order_id}`;
 
     console.log("📦 Creating Cashfree order with:", {
       amount: numAmount,
