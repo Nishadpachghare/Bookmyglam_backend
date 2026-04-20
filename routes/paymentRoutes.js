@@ -39,7 +39,7 @@ router.post("/create-order", async (req, res) => {
   }
   
   try {
-    const { amount, customer } = req.body;
+    const { amount, customer, clientOrigin } = req.body;
 
     // ✅ VALIDATE REQUEST DATA
     if (!amount || amount <= 0) {
@@ -56,13 +56,14 @@ router.post("/create-order", async (req, res) => {
       return res.status(400).json({ error: "Customer details (name, email, phone) are required" });
     }
 
-    // ✅ VALIDATE CLIENT_URL
-    if (!process.env.CLIENT_URL) {
-      console.error("❌ CLIENT_URL not set in environment variables");
-      return res.status(500).json({ error: "Server configuration error: CLIENT_URL not set" });
+    // ✅ DETERMINE RETURN URL: Use clientOrigin if provided, fallback to CLIENT_URL env
+    let returnBaseUrl = clientOrigin || process.env.CLIENT_URL;
+    if (!returnBaseUrl) {
+      console.error("❌ Neither clientOrigin nor CLIENT_URL provided");
+      return res.status(500).json({ error: "Server configuration error: return URL not available" });
     }
 
-    const returnUrl = `${process.env.CLIENT_URL}/booking?order_id={order_id}`;
+    const returnUrl = `${returnBaseUrl}/booking?order_id={order_id}`;
 
     console.log("📦 Creating Cashfree order with:", {
       amount: numAmount,
